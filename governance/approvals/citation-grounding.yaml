@@ -1,0 +1,7 @@
+harness: citation-grounding
+state: approved
+approved_at: "2026-05-18"
+approved_version: "2.2.4"
+approved_by: ["@m.reyes (governance board)", "@a.okafor (platform)"]
+last_reviewed: "2026-05-18"
+review_due: "2026-08-16"

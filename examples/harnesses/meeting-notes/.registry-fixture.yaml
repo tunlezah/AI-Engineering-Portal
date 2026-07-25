@@ -1,0 +1,8 @@
+project_path: ai-platform/harnesses/sandbox/meeting-notes
+web_url: https://gitlab.acme.internal/ai-platform/harnesses/sandbox/meeting-notes
+commit: 5a19cf3e08b7d4269301fae85b6c2d7419083bef
+last_activity_at: "2026-02-14T11:20:00Z"
+pipeline: {status: failed}
+releases: []
+secret_scan_clean: true
+open_issue_stats: {counts: {opened: 1}}

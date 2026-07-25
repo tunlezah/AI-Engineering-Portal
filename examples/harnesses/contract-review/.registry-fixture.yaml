@@ -1,0 +1,17 @@
+project_path: ai-platform/harnesses/legal/contract-review
+web_url: https://gitlab.acme.internal/ai-platform/harnesses/legal/contract-review
+commit: 7c1f5a9e0b3d48a2f6e91c4d7b8a35e2f0d19c46
+last_activity_at: "2026-07-19T03:12:04Z"
+visibility: internal
+pipeline: {status: success, web_url: "https://gitlab.acme.internal/ai-platform/harnesses/legal/contract-review/-/pipelines/98213"}
+releases:
+  - {tag_name: v2.3.1, released_at: "2026-07-19T03:12:04Z"}
+  - {tag_name: v2.3.0, released_at: "2026-06-24T10:15:00Z"}
+  - {tag_name: v2.2.0, released_at: "2026-05-02T14:30:00Z"}
+  - {tag_name: v2.0.0, released_at: "2026-02-18T09:00:00Z"}
+  - {tag_name: v1.4.2, released_at: "2025-12-09T16:20:00Z"}
+signed_tag: true
+sbom_published: true
+secret_scan_clean: true
+median_issue_response_days: 1.5
+open_issue_stats: {counts: {opened: 6}}

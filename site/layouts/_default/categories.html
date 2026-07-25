@@ -1,0 +1,48 @@
+{{ define "main" }}
+{{ $f := .Site.Data.facets }}
+{{ $r := .Site.Data.registry }}
+<header class="page-head">
+  <h1>{{ .Title }}</h1>
+  {{ with .Content }}<div class="prose">{{ . }}</div>{{ end }}
+</header>
+
+<section>
+  <h2>Business domain — whose problem does this solve?</h2>
+  <ul class="term-grid">
+    {{ range $id, $meta := $f.business }}
+    {{ $n := index $r.business $id | default 0 }}
+    <li>
+      {{ if $n }}<a href="{{ printf "categories/business/%s/" $id | relURL }}"><strong>{{ $meta.label }}</strong></a>
+      {{ else }}<strong class="muted">{{ $meta.label }}</strong>{{ end }}
+      <span class="muted">{{ $n }}</span>
+      <p class="muted small">{{ $meta.description }}{{ if not $n }} <em>No harnesses yet.</em>{{ end }}</p>
+    </li>
+    {{ end }}
+  </ul>
+</section>
+
+<section>
+  <h2>Technical domain — how is it built?</h2>
+  <ul class="term-grid">
+    {{ range $id, $meta := $f.technical }}
+    {{ $n := index $r.technical $id | default 0 }}
+    <li>
+      {{ if $n }}<a href="{{ printf "categories/technical/%s/" $id | relURL }}"><strong>{{ $meta.label }}</strong></a>
+      {{ else }}<strong class="muted">{{ $meta.label }}</strong>{{ end }}
+      <span class="muted">{{ $n }}</span>
+      {{ with $meta.axis }}<p class="muted small">{{ . }}</p>{{ end }}
+    </li>
+    {{ end }}
+  </ul>
+</section>
+
+<section>
+  <h2>Lifecycle — how mature?</h2>
+  <ul class="term-grid">
+    {{ range $id, $n := $r.lifecycles }}
+    <li><a href="{{ printf "categories/lifecycle/%s/" $id | relURL }}"><strong>{{ $id }}</strong></a>
+      <span class="muted">{{ $n }}</span></li>
+    {{ end }}
+  </ul>
+</section>
+{{ end }}

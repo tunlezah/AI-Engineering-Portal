@@ -1,0 +1,69 @@
+apiVersion: harness.registry.acme.internal/v1
+kind: Harness
+metadata:
+  id: research-brief
+  name: Research Brief
+  summary: Produces a sourced internal research brief on a topic by sweeping several internal corpora.
+  owner: group:knowledge-services
+  maintainers: ["@e.lindholm", "@t.whitmore"]
+  team: knowledge-services
+  tags: [research, synthesis, multi-source, briefing]
+spec:
+  version: 0.4.1
+  lifecycle: experimental
+  domains:
+    business: [knowledge, cross-functional]
+    technical: [agentic, rag, summarisation, long-context]
+  architecture:
+    pattern: research-assistant
+    deviations:
+      - "Hard iteration and cost ceilings; the blueprint's open-ended loop is not affordable at our corpus size."
+  models:
+    supported: [claude-opus-5]
+    default: claude-opus-5
+  runtimes: [agent-sdk-python, notebook]
+  plugins:
+    required:
+      - {id: knowledge-search, range: "^5.2.0", purpose: "Permission-aware corpus search.", trust_tier: core}
+      - {id: web-archive-search, range: "^0.3.0", purpose: "Internal crawl archive.", trust_tier: experimental}
+    optional:
+      - {id: meeting-transcripts, range: "^1.1.0", purpose: "Decisions recorded in meetings.", trust_tier: community}
+  retrieval:
+    enabled: true
+    strategy: hybrid
+    index: knowledge-all-v6
+    embedding_model: internal-embed-v3
+    top_k: 20
+    reranker: internal-rerank-v2
+  interfaces:
+    inputs:
+      - {name: topic, type: string, description: "Research question or topic.", required: true}
+      - {name: depth, type: string, description: "quick | standard | deep — sets the iteration and cost ceiling.", required: false}
+    outputs:
+      - {name: brief, type: string, format: markdown, description: "Structured brief with sources per claim."}
+      - {name: sources, type: array, description: "Everything consulted, including what was rejected and why."}
+  guardrails:
+    - {id: iteration-ceiling, type: cost-ceiling, enforcement: blocking, implemented_by: config/default.yaml}
+    - {id: permission-aware-retrieval, type: input-filter, enforcement: blocking, implemented_by: "plugin:knowledge-search"}
+  security:
+    classification: internal
+    risk_level: medium
+    data_types: [internal]
+    human_review: required
+    egress: [none]
+  operations:
+    estimated_cost: {unit: per-invocation, value: 2.40, currency: GBP, basis: "standard depth, 30-run experiment. Highly variable."}
+    estimated_latency: {p50_ms: 210000, p95_ms: 620000, measured_on: "2026-07-11"}
+    support: none
+  limitations:
+    - "Experimental. No evaluation suite yet; quality is assessed by the authors reading the output."
+    - "Depends on an experimental plugin (web-archive-search) with no security review."
+    - "Cost varies by an order of magnitude with topic breadth."
+    - "No deduplication across corpora; the same document can be cited twice under different ids."
+  roadmap:
+    - {item: "Golden brief set with expert rubric scoring", target: "2026-Q4", issue: "#77"}
+  licensing: {license: ACME-Internal-1.0, third_party_review: false}
+  links:
+    repository: https://gitlab.acme.internal/ai-platform/harnesses/knowledge/research-brief
+    documentation: docs/index.md
+    support_channel: "#knowledge-ai"

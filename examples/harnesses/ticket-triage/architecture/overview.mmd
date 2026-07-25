@@ -1,0 +1,8 @@
+flowchart LR
+    T[Ticket] --> C[Classify]
+    C --> G{Confidence >= threshold}
+    G -->|no| H[Human triager]
+    G -->|yes| R[Retrieve similar incidents]
+    R --> S[Summarise]
+    S --> A[Propose routing]
+    A --> W[(ServiceNow write-back)]

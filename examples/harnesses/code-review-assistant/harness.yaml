@@ -1,0 +1,64 @@
+apiVersion: harness.registry.acme.internal/v1
+kind: Harness
+metadata:
+  id: code-review-assistant
+  name: Code Review Assistant
+  summary: First-pass merge request review with test-backed findings and repository-aware context.
+  owner: group:developer-experience
+  maintainers: ["@k.duarte", "@y.abebe"]
+  team: developer-experience
+  tags: [code-review, merge-requests, static-analysis, developer-tools]
+spec:
+  version: 1.6.1
+  lifecycle: certified
+  domains:
+    business: [engineering]
+    technical: [code-generation, analysis, tool-calling, developer-tools]
+  architecture:
+    pattern: code-assistant
+    deviations:
+      - "Findings that claim a behavioural bug must reproduce in the test runner before they are emitted."
+  models:
+    supported: [claude-opus-5, claude-sonnet-5]
+    default: claude-sonnet-5
+  runtimes: [gitlab-ci, agent-sdk-python]
+  plugins:
+    required:
+      - {id: repo-context, range: "^2.3.0", purpose: "File retrieval, blame and dependency context.", trust_tier: certified}
+      - {id: test-runner, range: "^1.5.0", purpose: "Reproduce claimed defects in a sandbox.", trust_tier: core}
+  interfaces:
+    inputs:
+      - {name: merge_request, type: string, description: "Project path and MR IID.", required: true}
+      - {name: focus, type: array, description: "Optional review dimensions: correctness, security, performance, tests.", required: false}
+    outputs:
+      - {name: findings, type: array, description: "File, line, severity, claim, reproduction status, suggested fix."}
+      - {name: summary, type: string, format: markdown, description: "Reviewer-facing summary."}
+    config_schema: config/schema.json
+  guardrails:
+    - {id: reproduce-before-claiming, type: grounding-check, enforcement: blocking, implemented_by: workflows/review.yaml}
+    - {id: no-secret-echo, type: output-filter, enforcement: blocking, implemented_by: guardrails/no-secrets.yaml}
+    - {id: cost-ceiling, type: cost-ceiling, enforcement: blocking, implemented_by: config/default.yaml}
+  policies: [POL-0019]
+  security:
+    classification: confidential
+    risk_level: medium
+    data_types: [source-code, internal]
+    human_review: required
+    egress: [none]
+  operations:
+    estimated_cost: {unit: per-invocation, value: 0.31, currency: GBP, basis: "Median 240-line MR, sonnet, 2026-06 rate card over 900 reviews."}
+    estimated_latency: {p50_ms: 42000, p95_ms: 158000, measured_on: "2026-07-05"}
+    concurrency: 12
+    support: business-hours
+  limitations:
+    - "Python, TypeScript, Go and Java only; other languages produce comment-level review without reproduction."
+    - "Cannot review changes that require running the full integration environment."
+    - "Findings are advisory; the harness never approves or blocks a merge request itself."
+    - "Large MRs (>2,000 changed lines) are sampled rather than reviewed exhaustively."
+  roadmap:
+    - {item: "Rust support", target: "2026-Q4", issue: "#640"}
+  licensing: {license: ACME-Internal-1.0, third_party_review: false}
+  links:
+    repository: https://gitlab.acme.internal/ai-platform/harnesses/engineering/code-review-assistant
+    documentation: docs/index.md
+    support_channel: "#dx-ai"

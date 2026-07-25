@@ -1,0 +1,374 @@
+{{ define "main" }}
+{{ $c := index .Site.Data.cards .Params.id }}
+{{ $spec := $c.spec.spec }}
+{{ $meta := $c.spec.metadata }}
+{{ $st := $c.status }}
+{{ $repo := $st.source.web_url }}
+
+<article class="harness" itemscope>
+
+  {{/* ---------- above the fold: the adoption decision ---------- */}}
+  <header class="harness-hero">
+    <div class="hero-main">
+      <p class="eyebrow">
+        <a href="{{ "harnesses/" | relURL }}">Harnesses</a>
+        {{ with index $spec.domains.business 0 }} · <a href="{{ printf "categories/business/%s/" . | relURL }}">{{ . }}</a>{{ end }}
+      </p>
+      <h1>{{ $meta.name }}</h1>
+      <p class="summary">{{ $meta.summary }}</p>
+      <p class="badges">
+        <span class="badge lc lc-{{ $st.lifecycle.effective }}">{{ $st.display.lifecycle_label }}</span>
+        <span class="badge q q-{{ $st.quality.colour }}" title="Quality score">Quality {{ $st.quality.score }} · {{ $st.quality.band }}</span>
+        {{ with $st.released_version }}<span class="badge">v{{ . }}</span>{{ end }}
+        <span class="badge sec-{{ $spec.security.classification }}">{{ $spec.security.classification }}</span>
+        {{ with $spec.security.risk_level }}<span class="badge">risk: {{ . }}</span>{{ end }}
+        {{ if $st.approval.certified_at }}<span class="badge cert">Certified {{ $st.approval.certified_at }}</span>{{ end }}
+      </p>
+      <p class="owner-line">
+        Owned by <a href="{{ printf "owners/%s/" (replace $meta.owner "group:" "") | relURL }}">{{ $meta.owner }}</a>
+        · team <a href="{{ printf "teams/%s/" $meta.team | relURL }}">{{ $meta.team }}</a>
+        {{ with $spec.links.support_channel }} · {{ . }}{{ end }}
+        {{ with $st.last_updated }} · updated {{ substr . 0 10 }}{{ end }}
+      </p>
+      <p class="actions">
+        <a class="button primary" href="#h-quick-start">Use this harness</a>
+        <a class="button" href="{{ $repo }}">Repository</a>
+        <a class="button" href="{{ $repo }}/-/issues">Report an issue</a>
+      </p>
+    </div>
+  </header>
+
+  {{/* ---------- bad news, first, always ---------- */}}
+  {{ range $st.display.banners }}
+  <aside class="banner {{ .tone }}" role="note">
+    <strong>{{ .title }}</strong>
+    {{ with .body }}<span>{{ . }}</span>{{ end }}
+  </aside>
+  {{ end }}
+
+  {{/* ---------- headline metrics ---------- */}}
+  <section class="headline" aria-label="Key metrics">
+    {{ range $st.display.headline }}
+    <div class="metric {{ with .tone }}tone-{{ . }}{{ end }}">
+      <span class="metric-label">{{ .label }}</span>
+      <span class="metric-value">{{ .value }}</span>
+      <span class="metric-sub">{{ .sub }}</span>
+    </div>
+    {{ end }}
+  </section>
+
+  <div class="harness-body">
+    <div class="harness-main">
+
+      <section id="h-overview">
+        <h2>Overview</h2>
+        {{ .Content }}
+        {{ with $spec.limitations }}
+        <div class="callout limitations">
+          <h3>Limitations</h3>
+          <ul>{{ range . }}<li>{{ . }}</li>{{ end }}</ul>
+        </div>
+        {{ end }}
+      </section>
+
+      <section id="h-architecture">
+        <h2>Architecture</h2>
+        <p>
+          Implements the
+          <a href="{{ printf "reference-architectures/%s/" $spec.architecture.pattern | relURL }}">{{ $spec.architecture.pattern }}</a>
+          blueprint.
+        </p>
+        {{ with $spec.architecture.deviations }}
+        <details open>
+          <summary>Deviations from the blueprint ({{ len . }})</summary>
+          <ul>{{ range . }}<li>{{ . }}</li>{{ end }}</ul>
+        </details>
+        {{ end }}
+        {{ with $st.mermaid.overview }}<pre class="mermaid">{{ . }}</pre>{{ end }}
+        {{ with $st.mermaid.sequence }}
+        <details><summary>Run sequence</summary><pre class="mermaid">{{ . }}</pre></details>
+        {{ end }}
+        {{ with $st.content.counts.adrs }}
+        <p class="muted">{{ . }} architecture decision record(s) in
+          <a href="{{ $repo }}/-/tree/main/architecture/decisions">architecture/decisions/</a>.</p>
+        {{ end }}
+      </section>
+
+      <section id="h-relationships">
+        <h2>Relationships</h2>
+        <p class="muted">Generated from manifests and skill declarations — never hand-drawn, so it cannot go stale.</p>
+        {{ with $st.mermaid.neighbourhood }}<pre class="mermaid">{{ . }}</pre>{{ end }}
+      </section>
+
+      <section id="h-quick-start">
+        <h2>Quick Start</h2>
+        <div class="install">
+          <p>Resolve this harness from the registry snapshot:</p>
+          <pre><code>harnessctl add {{ $meta.id }}@^{{ or $st.released_version $spec.version }}
+harnessctl install</code></pre>
+          <p class="muted">Pin a range, not <code>latest</code>. The registry notifies consumers on major releases and deprecations.</p>
+        </div>
+        <p><a href="{{ $repo }}/-/blob/main/docs/quickstart.md">Full quick start</a>
+        {{ if $st.quality.breakdown.documentation }}
+          {{ range $st.quality.breakdown.documentation.signals }}
+            {{ if eq .id "quickstart-executable" }}
+              {{ if eq .value 1.0 }}<span class="tick" title="Executed by CI on every pipeline">· verified by CI</span>{{ end }}
+            {{ end }}
+          {{ end }}
+        {{ end }}
+        </p>
+      </section>
+
+      <section id="h-configuration">
+        <h2>Configuration</h2>
+        {{ with $st.content.config_schema }}
+        <table class="data">
+          <caption>Generated from <code>{{ $spec.interfaces.config_schema }}</code></caption>
+          <thead><tr><th>Key</th><th>Type</th><th>Default</th><th>Constraints</th><th>Notes</th></tr></thead>
+          <tbody>
+          {{ range $k, $v := .properties }}
+            <tr>
+              <td><code>{{ $k }}</code>{{ if in ($.Scratch.Get "req" | default slice) $k }} <span class="req">required</span>{{ end }}</td>
+              <td>{{ $v.type }}</td>
+              <td>{{ with $v.default }}<code>{{ . }}</code>{{ else }}—{{ end }}</td>
+              <td>
+                {{ with $v.enum }}{{ delimit . ", " }}{{ end }}
+                {{ with $v.minimum }}min {{ . }}{{ end }}
+                {{ with $v.maximum }} · max {{ . }}{{ end }}
+              </td>
+              <td>{{ with $v.description }}{{ . }}{{ end }}</td>
+            </tr>
+          {{ end }}
+          </tbody>
+        </table>
+        {{ else }}
+        <p class="muted">No configuration schema declared.</p>
+        {{ end }}
+      </section>
+
+      <section id="h-interfaces">
+        <h2>Interface</h2>
+        <p class="muted">This is the contract SemVer governs. Changing it incompatibly is a major release.</p>
+        <div class="two-col">
+          <div>
+            <h3>Inputs</h3>
+            <table class="data"><tbody>
+            {{ range $spec.interfaces.inputs }}
+              <tr><td><code>{{ .name }}</code></td><td>{{ .type }}{{ with .format }} ({{ . }}){{ end }}</td>
+              <td>{{ .description }}{{ if eq .required false }} <em>optional</em>{{ end }}</td></tr>
+            {{ end }}
+            </tbody></table>
+          </div>
+          <div>
+            <h3>Outputs</h3>
+            <table class="data"><tbody>
+            {{ range $spec.interfaces.outputs }}
+              <tr><td><code>{{ .name }}</code></td><td>{{ .type }}{{ with .format }} ({{ . }}){{ end }}</td>
+              <td>{{ .description }}</td></tr>
+            {{ end }}
+            </tbody></table>
+          </div>
+        </div>
+      </section>
+
+      {{ with $spec.guardrails }}
+      <section id="h-guardrails">
+        <h2>Guardrails</h2>
+        <p class="muted">Declared controls. CI fails if a declared guardrail is not wired into a workflow step.</p>
+        <table class="data">
+          <thead><tr><th>Guardrail</th><th>Type</th><th>Enforcement</th><th>Implemented by</th></tr></thead>
+          <tbody>
+          {{ range . }}
+            <tr>
+              <td><code>{{ .id }}</code></td>
+              <td>{{ .type }}</td>
+              <td><span class="badge enf-{{ .enforcement }}">{{ .enforcement }}</span></td>
+              <td><code>{{ .implemented_by }}</code></td>
+            </tr>
+          {{ end }}
+          </tbody>
+        </table>
+      </section>
+      {{ end }}
+
+      {{ partial "evaluation.html" (dict "card" $c "repo" $repo) }}
+
+      <section id="h-prompts">
+        <h2>Prompts &amp; implementation</h2>
+        <div class="tiles">
+          {{ with $st.content.counts.prompts }}<a class="tile" href="{{ $repo }}/-/tree/main/prompts"><strong>{{ . }}</strong> prompts</a>{{ end }}
+          {{ with $st.content.counts.tests }}<a class="tile" href="{{ $repo }}/-/tree/main/tests"><strong>{{ . }}</strong> test files</a>{{ end }}
+          {{ with $st.content.counts.datasets }}<a class="tile" href="{{ $repo }}/-/tree/main/datasets"><strong>{{ . }}</strong> datasets</a>{{ end }}
+          {{ with $st.content.counts.conversations }}<a class="tile" href="{{ $repo }}/-/tree/main/conversations"><strong>{{ . }}</strong> sample runs</a>{{ end }}
+        </div>
+        <p class="muted">Prompts are versioned files with declared variables and token budgets; the pipeline renders
+        every prompt against every fixture on each merge request.</p>
+      </section>
+
+      {{ with $st.content.changelog }}
+      <section id="h-version-history">
+        <h2>Version history</h2>
+        <div class="changelog">{{ . | markdownify }}</div>
+      </section>
+      {{ end }}
+
+      <section id="h-discussion">
+        <h2>Discussion</h2>
+        <p>The registry does not host comments — that would split the conversation.
+           Questions, defects and requests go to the project:</p>
+        <p class="actions">
+          <a class="button" href="{{ $repo }}/-/issues/new">Ask a question</a>
+          <a class="button" href="{{ $repo }}/-/issues">Open issues</a>
+          <a class="button" href="{{ $repo }}/-/merge_requests">Merge requests</a>
+        </p>
+      </section>
+    </div>
+
+    {{/* ---------- sidebar ---------- */}}
+    <aside class="harness-side">
+      <nav class="toc" aria-label="On this page">
+        <h2>On this page</h2>
+        <ul>
+          <li><a href="#h-overview">Overview</a></li>
+          <li><a href="#h-architecture">Architecture</a></li>
+          <li><a href="#h-relationships">Relationships</a></li>
+          <li><a href="#h-quick-start">Quick start</a></li>
+          <li><a href="#h-configuration">Configuration</a></li>
+          <li><a href="#h-interfaces">Interface</a></li>
+          {{ with $spec.guardrails }}<li><a href="#h-guardrails">Guardrails</a></li>{{ end }}
+          <li><a href="#h-evaluation">Evaluation</a></li>
+          <li><a href="#h-prompts">Prompts</a></li>
+          <li><a href="#h-version-history">Version history</a></li>
+          <li><a href="#h-discussion">Discussion</a></li>
+        </ul>
+      </nav>
+
+      <div class="side-block">
+        <h2>Quality {{ $st.quality.score }}/100</h2>
+        {{ $st.charts.quality_bars | safeHTML }}
+        {{ with $st.quality.capped_by }}<p class="muted">Capped by failing gate <code>{{ . }}</code>.</p>{{ end }}
+        {{ with $st.quality.top_gaps }}
+        <details>
+          <summary>Biggest gaps</summary>
+          <ul class="gaps">{{ range . }}<li><strong>+{{ .points }}</strong> {{ .rule }}</li>{{ end }}</ul>
+        </details>
+        {{ end }}
+        {{ with $st.lifecycle.next_tier_gaps }}
+        <details>
+          <summary>To reach {{ $st.lifecycle.next_tier }}</summary>
+          <ul class="gaps">{{ range . }}<li>{{ . }}</li>{{ end }}</ul>
+        </details>
+        {{ end }}
+      </div>
+
+      <div class="side-block">
+        <h2>Required plugins</h2>
+        {{ $req := where $st.plugin_resolution "kind" "required" }}
+        {{ if $req }}
+        <ul class="plugins">
+          {{ range $req }}
+          <li>
+            <a href="{{ printf "categories/plugin/%s/" .id | relURL }}"><code>{{ .id }}</code></a>
+            <span class="trust trust-{{ .trust_tier }}">{{ .trust_tier }}</span><br>
+            <span class="muted">{{ .range }} → {{ with .resolved }}{{ . }}{{ else }}<span class="bad">unresolved</span>{{ end }}</span>
+            {{ with .purpose }}<br><span class="muted small">{{ . }}</span>{{ end }}
+          </li>
+          {{ end }}
+        </ul>
+        {{ else }}<p class="muted">None.</p>{{ end }}
+        {{ $opt := where $st.plugin_resolution "kind" "optional" }}
+        {{ with $opt }}
+        <h3>Optional</h3>
+        <ul class="plugins">{{ range . }}<li><code>{{ .id }}</code> <span class="trust trust-{{ .trust_tier }}">{{ .trust_tier }}</span></li>{{ end }}</ul>
+        {{ end }}
+      </div>
+
+      <div class="side-block">
+        <h2>Consumers</h2>
+        {{ if $st.consumers }}
+        <ul class="consumers">
+          {{ range $st.consumers }}
+          <li><strong>{{ .name }}</strong><br>
+            <span class="muted small">skill · {{ .team }} · pinned {{ .range }}</span></li>
+          {{ end }}
+        </ul>
+        <p class="muted small">Computed from Skill Marketplace manifests, not declared here.</p>
+        {{ else }}
+        <p class="muted">No skills depend on this yet.</p>
+        {{ end }}
+      </div>
+
+      {{ with $spec.dependencies }}
+      <div class="side-block">
+        <h2>Dependencies</h2>
+        <ul class="deps">
+          {{ range . }}
+          <li><a href="{{ printf "harnesses/%s/" .harness | relURL }}"><code>{{ .harness }}</code></a>
+            <span class="muted small">{{ .kind | default "composes" }} {{ .range }}</span></li>
+          {{ end }}
+        </ul>
+      </div>
+      {{ end }}
+
+      <div class="side-block">
+        <h2>Runtime</h2>
+        <dl class="kv">
+          <dt>Models</dt><dd>{{ range $spec.models.supported }}<a href="{{ printf "categories/model/%s/" . | relURL }}">{{ . }}</a> {{ end }}</dd>
+          {{ with $spec.models.default }}<dt>Default</dt><dd>{{ . }}</dd>{{ end }}
+          <dt>Runtimes</dt><dd>{{ delimit $spec.runtimes ", " }}</dd>
+          {{ with $spec.retrieval }}{{ if .enabled }}<dt>Retrieval</dt><dd>{{ .strategy }} · <code>{{ .index }}</code>{{ with .top_k }} · top-{{ . }}{{ end }}</dd>{{ end }}{{ end }}
+          {{ with $spec.operations.support }}<dt>Support</dt><dd>{{ . }}</dd>{{ end }}
+          <dt>Human review</dt><dd>{{ $spec.security.human_review }}</dd>
+          <dt>Data types</dt><dd>{{ delimit $spec.security.data_types ", " }}</dd>
+          <dt>Egress</dt><dd>{{ delimit $spec.security.egress ", " }}</dd>
+          <dt>Licence</dt><dd>{{ $spec.licensing.license }}</dd>
+        </dl>
+      </div>
+
+      {{ with $spec.models.unsupported }}
+      <div class="side-block">
+        <h2>Known not to work</h2>
+        <ul class="unsupported">
+          {{ range . }}<li><code>{{ .model }}</code><br><span class="muted small">{{ .reason }}</span></li>{{ end }}
+        </ul>
+        <p class="muted small">Published so the same experiment is not repeated.</p>
+      </div>
+      {{ end }}
+
+      <div class="side-block">
+        <h2>Governance</h2>
+        <dl class="kv">
+          <dt>Approval</dt><dd>{{ $st.approval.state }}</dd>
+          {{ with $st.approval.last_reviewed }}<dt>Last reviewed</dt><dd>{{ . }}</dd>{{ end }}
+          {{ with $st.approval.review_due }}<dt>Review due</dt><dd{{ if $st.approval.overdue }} class="bad"{{ end }}>{{ . }}</dd>{{ end }}
+          {{ with $st.approval.certification_expires }}<dt>Certification expires</dt><dd>{{ . }}</dd>{{ end }}
+        </dl>
+        {{ with $st.approval.approved_by }}
+        <p class="muted small">Approved by {{ delimit . ", " }}</p>
+        {{ end }}
+      </div>
+
+      {{ with $spec.roadmap }}
+      <div class="side-block">
+        <h2>Roadmap</h2>
+        <ul class="roadmap">
+          {{ range . }}<li>{{ .item }} <span class="muted small">{{ with .target }}{{ . }}{{ end }} {{ with .issue }}{{ . }}{{ end }}</span></li>{{ end }}
+        </ul>
+      </div>
+      {{ end }}
+
+      <div class="side-block">
+        <h2>Downloads</h2>
+        <ul class="downloads">
+          <li><a href="{{ $repo }}/-/raw/main/harness.yaml">harness.yaml</a></li>
+          <li><a href="{{ $repo }}/-/raw/main/harness.lock">harness.lock</a></li>
+          <li><a href="{{ $repo }}/-/releases">Releases &amp; SBOM</a></li>
+          <li><a href="{{ $repo }}/-/tree/main/evaluations/results">Evaluation reports</a></li>
+        </ul>
+        <p class="muted small">Card digest <code>{{ substr $st.source.manifest_digest 0 19 }}…</code><br>
+        Indexed {{ $st.indexed_at }}</p>
+      </div>
+    </aside>
+  </div>
+</article>
+{{ end }}

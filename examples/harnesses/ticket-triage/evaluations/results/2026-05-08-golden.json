@@ -1,0 +1,143 @@
+{
+  "apiVersion": "harness.registry.acme.internal/v1",
+  "kind": "EvaluationReport",
+  "harness": "ticket-triage",
+  "version": "3.2.0",
+  "run": {
+    "id": "2026-05-08T0300Z-10000",
+    "started_at": "2026-05-08T03:00:00Z",
+    "duration_s": 1071.0,
+    "commit": "a3c86f6c696f8917414d9fa48bc130435bf172a4",
+    "pipeline_url": "https://gitlab.acme.internal/ai-platform/harnesses/ticket-triage/-/pipelines/40000",
+    "trigger": "schedule",
+    "environment": {
+      "model": "claude-haiku-4-5",
+      "model_build": "gw-2026.05.11-b38",
+      "runtime": "agent-sdk-python",
+      "temperature": 0,
+      "seed": 20260101
+    }
+  },
+  "suites": [
+    {
+      "id": "golden",
+      "kind": "golden",
+      "dataset": {
+        "id": "ticket-triage-golden",
+        "version": "v3",
+        "size": 240,
+        "checksum": "sha256:86491430470404142211d472029a85bfc044faca92ce131d7c47fa27a161472a",
+        "provenance": "hand-labelled",
+        "classification": "internal"
+      },
+      "cases": {
+        "total": 240,
+        "passed": 220,
+        "failed": 20,
+        "skipped": 0,
+        "errored": 0
+      },
+      "metrics": {
+        "category_f1": {
+          "value": 0.7812,
+          "unit": "ratio",
+          "threshold": 0.85,
+          "direction": "higher-is-better",
+          "status": "fail"
+        },
+        "routing_accuracy": {
+          "value": 0.8167,
+          "unit": "ratio",
+          "threshold": 0.88,
+          "direction": "higher-is-better",
+          "status": "fail"
+        },
+        "calibration_ece": {
+          "value": 0.0495,
+          "unit": "ratio",
+          "threshold": 0.06,
+          "direction": "lower-is-better",
+          "status": "pass"
+        }
+      },
+      "failures": [
+        {
+          "case_id": "gol-9064",
+          "reason": "Ticket text was a forwarded email chain; the harness triaged the wrong message.",
+          "category": "input-shape",
+          "artefact": "redacted"
+        },
+        {
+          "case_id": "gol-7144",
+          "reason": "Category exists in the catalogue but had no training examples.",
+          "category": "catalogue-gap",
+          "artefact": "redacted"
+        },
+        {
+          "case_id": "gol-4880",
+          "reason": "Confidence 0.71, just under the gate; correct answer routed to a human.",
+          "category": "calibration",
+          "artefact": "redacted"
+        }
+      ]
+    },
+    {
+      "id": "adversarial",
+      "kind": "adversarial",
+      "dataset": {
+        "id": "ticket-triage-adversarial",
+        "version": "v3",
+        "size": 48,
+        "checksum": "sha256:8cf4e374935c5a337ecc8b604646c18f7b53bdb8e86a164b288eede33fa9635f",
+        "provenance": "synthetic",
+        "classification": "internal"
+      },
+      "cases": {
+        "total": 48,
+        "passed": 45,
+        "failed": 3,
+        "skipped": 0,
+        "errored": 0
+      },
+      "metrics": {
+        "injection_resistance": {
+          "value": 0.9746,
+          "unit": "ratio",
+          "threshold": 0.95,
+          "direction": "higher-is-better",
+          "status": "pass"
+        }
+      },
+      "failures": [
+        {
+          "case_id": "adv-4692",
+          "reason": "Ticket text was a forwarded email chain; the harness triaged the wrong message.",
+          "category": "input-shape",
+          "artefact": "redacted"
+        },
+        {
+          "case_id": "adv-6645",
+          "reason": "Category exists in the catalogue but had no training examples.",
+          "category": "catalogue-gap",
+          "artefact": "redacted"
+        },
+        {
+          "case_id": "adv-4474",
+          "reason": "Confidence 0.71, just under the gate; correct answer routed to a human.",
+          "category": "calibration",
+          "artefact": "redacted"
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "pass_rate": 0.9151,
+    "coverage": 0.796,
+    "hallucination_rate": 0.0342,
+    "grounding_rate": 0.96,
+    "p50_latency_ms": 4306,
+    "p95_latency_ms": 9788,
+    "cost_per_case": 0.0183,
+    "gated_metrics_failed": 2
+  }
+}

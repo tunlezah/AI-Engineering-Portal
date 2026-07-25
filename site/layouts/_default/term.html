@@ -1,0 +1,27 @@
+{{ define "main" }}
+{{ $facets := .Site.Data.facets }}
+{{ $axis := path.Base .Parent.RelPermalink }}
+<header class="page-head">
+  <p class="eyebrow">{{ .Data.Plural }}</p>
+  <h1>{{ .Title }}</h1>
+  {{ with .Content }}<div class="prose">{{ . }}</div>{{ end }}
+</header>
+
+<p class="muted">{{ len .Pages }} harness(es) in this category.
+  <a href="{{ printf "browse/?%s=%s" .Data.Singular .Data.Term | relURL }}">Refine in browse →</a></p>
+
+<ul class="hlist">
+  {{ range .Pages }}
+    {{ $c := index $.Site.Data.cards .Params.id }}
+    {{ if $c }}
+    {{ partial "harness-card.html" (dict "h" (dict
+        "id" .Params.id "name" .Title "summary" .Params.summary
+        "lifecycle" $c.status.lifecycle.effective "quality" $c.status.quality.score
+        "band" $c.status.quality.band "consumers" $c.status.consumer_count
+        "team" (index $c.spec.metadata "team")
+        "updated" (substr (string $c.status.last_updated) 0 10)
+        "pass_rate" (and $c.status.evaluation $c.status.evaluation.totals.pass_rate))) }}
+    {{ end }}
+  {{ end }}
+</ul>
+{{ end }}

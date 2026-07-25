@@ -1,0 +1,52 @@
+apiVersion: harness.registry.acme.internal/v1
+kind: Harness
+metadata:
+  id: document-segmentation
+  name: Document Segmentation
+  summary: Structure-aware segmentation of long documents into semantically complete units with anchors.
+  owner: group:ai-platform
+  maintainers: ["@r.das", "@h.varga"]
+  team: ai-platform
+  tags: [chunking, segmentation, anchors, building-block]
+spec:
+  version: 4.1.2
+  lifecycle: team-ready
+  domains:
+    business: [cross-functional]
+    technical: [extraction, workflow]
+  architecture: {pattern: document-review}
+  models:
+    supported: [claude-sonnet-5, claude-haiku-4-5]
+    default: claude-haiku-4-5
+  runtimes: [agent-sdk-python, cli]
+  plugins:
+    required:
+      - {id: document-parser, range: "^3.2.0", purpose: "Text extraction with page and paragraph anchors.", trust_tier: core}
+  interfaces:
+    inputs:
+      - {name: text, type: string, description: "Parsed document text with anchors.", required: true}
+      - {name: profile, type: string, description: "Segmentation profile: legal-clause, policy-section, technical-spec, generic.", required: true}
+    outputs:
+      - {name: segments, type: array, description: "Ordered segments with anchor, heading path, token count and continuation links."}
+    config_schema: config/schema.json
+  guardrails:
+    - {id: max-segment-size, type: output-filter, enforcement: blocking, implemented_by: workflows/segment.yaml}
+  security:
+    classification: internal
+    risk_level: low
+    data_types: [internal]
+    human_review: not-required
+    egress: [none]
+  operations:
+    estimated_cost: {unit: per-document, value: 0.04, currency: GBP, basis: "40-page document, haiku, 500-run sample."}
+    estimated_latency: {p50_ms: 4200, p95_ms: 11000, measured_on: "2026-06-30"}
+    support: best-effort
+  limitations:
+    - "Documents without numbering or consistent headings fall back to paragraph segmentation (F1 ~0.79)."
+    - "No table-aware segmentation; tables are emitted as single segments regardless of size."
+    - "Profiles are hand-tuned per document family; a new family needs a new profile and its own evaluation."
+  licensing: {license: ACME-Internal-1.0, third_party_review: false}
+  links:
+    repository: https://gitlab.acme.internal/ai-platform/harnesses/shared/document-segmentation
+    documentation: docs/index.md
+    support_channel: "#ai-platform"

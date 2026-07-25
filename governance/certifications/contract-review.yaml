@@ -1,0 +1,29 @@
+# Certification record. Lives in the REGISTRY project, not the harness project:
+# a team cannot certify itself. CODEOWNERS on governance/certifications/ requires
+# two governance board approvals plus security.
+harness: contract-review
+state: certified
+certified_at: "2026-07-14"
+certification_expires: "2026-10-12"
+certified_version: "2.3.1"
+approved_by:
+  - "@m.reyes (governance board)"
+  - "@t.nakamura (governance board)"
+  - "@p.oyelaran (security engineering)"
+  - "@s.bahri (legal)"
+evidence:
+  quality_score: 97
+  pass_rate: 0.962
+  evaluation_run: "2026-07-19T0312Z-98213"
+  human_review: "evaluations/human-review/2026-07-10-v2.3.md"
+  signed_tag: "v2.3.1"
+  sbom: "https://gitlab.acme.internal/ai-platform/harnesses/legal/contract-review/-/releases/v2.3.1"
+last_reviewed: "2026-07-14"
+review_due: "2026-10-12"
+conditions:
+  - "Re-certification requires a fresh human review sample of >= 40 cases."
+  - "Any change to guardrails/no-advice.yaml re-opens legal approval."
+notes: >
+  Certified for first-pass review of inbound third-party commercial contracts
+  under the uk-standard and us-standard playbooks. Not certified for public-sector
+  procurement paper pending POL-0041 assessment.

@@ -1,0 +1,15 @@
+{
+  "_comment": "Team slugs and owner groups, exported from the GitLab group tree. member_count is what the owner-validity signal checks: an owner group of one is a single point of failure, not an owner.",
+  "exported_at": "2026-07-24T02:00:00Z",
+  "teams": [
+    {"slug": "legal-ai-platform", "name": "Legal AI Platform", "owner_group": "group:legal-ai-platform", "member_count": 6, "domain": "legal"},
+    {"slug": "cx-ai", "name": "Customer Experience AI", "owner_group": "group:cx-ai", "member_count": 5, "domain": "customer-support"},
+    {"slug": "itsm-ai", "name": "IT Service AI", "owner_group": "group:itsm-ai", "member_count": 4, "domain": "it-service"},
+    {"slug": "data-platform", "name": "Data Platform", "owner_group": "group:data-platform", "member_count": 9, "domain": "data-analytics"},
+    {"slug": "people-tech", "name": "People Technology", "owner_group": "group:people-tech", "member_count": 3, "domain": "hr-people"},
+    {"slug": "developer-experience", "name": "Developer Experience", "owner_group": "group:developer-experience", "member_count": 7, "domain": "engineering"},
+    {"slug": "knowledge-services", "name": "Knowledge Services", "owner_group": "group:knowledge-services", "member_count": 4, "domain": "knowledge"},
+    {"slug": "ai-platform", "name": "AI Platform", "owner_group": "group:ai-platform", "member_count": 8, "domain": "cross-functional"},
+    {"slug": "productivity-tools", "name": "Productivity Tools", "owner_group": "group:productivity-tools", "member_count": 1, "domain": "cross-functional"}
+  ]
+}

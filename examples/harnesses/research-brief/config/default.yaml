@@ -1,0 +1,8 @@
+model: claude-opus-5
+depth: standard
+# The iteration-ceiling guardrail reads these; an open-ended research loop
+# without a hard ceiling is an unbounded bill.
+ceilings:
+  quick:    {iterations: 3,  max_cost_gbp: 0.60}
+  standard: {iterations: 8,  max_cost_gbp: 3.00}
+  deep:     {iterations: 20, max_cost_gbp: 12.00}

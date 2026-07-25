@@ -9,6 +9,25 @@ prompts.
 Fully offline: GitLab, GitLab CI, GitLab Pages. No SaaS, no cloud APIs, no
 internet egress at build or run time.
 
+## Run it
+
+The registry is implemented, not just specified. It builds offline from the
+fixture harnesses in `examples/harnesses/` — no GitLab instance required.
+
+```shell
+make all        # validate -> crawl -> index -> emit -> build -> verify
+make serve      # browse it at http://localhost:1313
+make test       # 77 tests: scoring, lifecycle gates, validation, pipeline
+```
+
+Requires Python 3.11 (`pyyaml`, `jsonschema`) and Hugo extended ≥ 0.148.
+Against a real GitLab instance, swap the source: `make crawl-gitlab`
+(`REGISTRY_READ_TOKEN` + `groups.yaml`).
+
+What a build produces: 9 harnesses indexed, 8 valid, 2 auto-downgraded for
+over-claimed maturity, 1 invalid manifest rendered as an error card, 172 pages,
+~90 ms Hugo build, zero external asset references.
+
 ## Start here
 
 **[`docs/ai-harness-registry-design.md`](docs/ai-harness-registry-design.md)** — the
@@ -29,9 +48,13 @@ Everything the document specifies exists here as a real artefact, not a sketch.
 | `schema/taxonomy.yaml` | Business/technical taxonomy and reference architectures |
 | `ci/harness-ci.yml` | Shared GitLab CI template included by every harness project |
 | `ci/registry-ci.yml` | Registry pipeline: crawl → index → verify → build → deploy |
-| `tools/registryctl/crawl.py` | Reference crawler over GitLab groups (ETag-conditional) |
-| `tools/registryctl/index.py` | Reference indexer: scoring, lifecycle gates, graph, catalog |
-| `examples/harnesses/contract-review/` | A complete worked harness — manifest, prompts, workflow, guardrails, evaluations, datasets, tests, ADRs, docs |
+| `tools/registryctl/` | **The implementation**: sources, validation, observation, scoring, indexing, content emission, verification, CLI |
+| `tools/dev/` | Fixture generators (evaluation histories, blueprint pages) |
+| `site/` | The Hugo site: templates, hand-written CSS, vendored JS, faceted search |
+| `tests/` | Scoring, lifecycle gating, validation rules, end-to-end pipeline |
+| `examples/harnesses/` | Nine worked harnesses, including a certified one, a deliberately invalid one, and two that get auto-downgraded |
+| `governance/` | Approval and certification records — held outside the harness repos on purpose |
+| `vendor/` | Sibling registry exports, platform catalogues, vendored browser assets |
 
 ## The nine decisions
 
@@ -46,3 +69,28 @@ Everything the document specifies exists here as a real artefact, not a sketch.
 9. **Everything vendored** — enforced by a blocking "no external assets" CI gate.
 
 Rationale, trade-offs and rejected alternatives for each are in the document.
+
+## How the pieces fit
+
+```
+examples/harnesses/**/harness.yaml     a project is a harness because this exists
+        │  registryctl crawl           (LocalSource here, GitLabSource in production)
+        ▼
+build/crawl/*.json                     normalised projects
+        │  registryctl index           validate → observe → score → gate → resolve graph
+        ▼
+build/snapshot/                        cards, graph, catalog.json, registry.lock.yaml, index report
+        │  registryctl emit-content    content adapters (the replaceable layer)
+        ▼
+site/content + site/data + static/     Hugo input
+        │  hugo
+        ▼
+site/public/                           the registry — static, offline, ~4 MB
+        │  registryctl verify-site     links, external assets, budgets, accessibility
+        ▼
+GitLab Pages
+```
+
+The snapshot is the interface. Everything above it is the durable asset —
+metadata model, rubric, evaluation contract, governance separation. Everything
+below it is presentation, and could be replaced without touching any of that.

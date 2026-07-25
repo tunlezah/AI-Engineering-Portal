@@ -1,0 +1,44 @@
+# This manifest is deliberately broken, to exercise the registry's error path:
+#  * `summarization` is not a taxonomy term (the correct term is `summarisation`)
+#  * `meeting-transcripts` is declared with a range no published version satisfies
+#  * spec.limitations is empty, which the schema forbids
+apiVersion: harness.registry.acme.internal/v1
+kind: Harness
+metadata:
+  id: meeting-notes
+  name: Meeting Notes
+  summary: Turns meeting transcripts into decisions, actions and owners.
+  owner: group:productivity-tools
+  maintainers: ["@v.solberg"]
+  team: productivity-tools
+  tags: [meetings, summarisation, actions]
+spec:
+  version: 0.2.0
+  lifecycle: prototype
+  domains:
+    business: [cross-functional]
+    technical: [summarization, extraction]
+  architecture: {pattern: simple-chat}
+  models:
+    supported: [claude-haiku-4-5]
+    default: claude-haiku-4-5
+  runtimes: [agent-sdk-python]
+  plugins:
+    required:
+      - {id: meeting-transcripts, range: "^3.0.0", purpose: "Transcript access.", trust_tier: community}
+  interfaces:
+    inputs:
+      - {name: meeting_id, type: string, description: "Meeting identifier.", required: true}
+    outputs:
+      - {name: notes, type: string, format: markdown, description: "Decisions, actions and owners."}
+  security:
+    classification: internal
+    risk_level: low
+    data_types: [employee-pii, internal]
+    human_review: recommended
+    egress: [none]
+  limitations: []
+  licensing: {license: ACME-Internal-1.0, third_party_review: false}
+  links:
+    repository: https://gitlab.acme.internal/ai-platform/harnesses/sandbox/meeting-notes
+    documentation: README.md

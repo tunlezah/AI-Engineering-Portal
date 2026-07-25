@@ -1,0 +1,123 @@
+{{ $c := .card }}
+{{ $repo := .repo }}
+{{ $st := $c.status }}
+{{ $ev := $st.evaluation }}
+
+<section id="h-evaluation">
+  <h2>Evaluation</h2>
+
+  {{ if not $ev }}
+    <div class="callout warn">
+      <p><strong>No evaluation published.</strong> Nothing here has been measured, so treat every
+      claim on this page as an assertion by the authors. A harness needs a golden suite of at
+      least 50 cases to reach Team Ready.</p>
+      <p class="muted">Starter suites for this pattern:
+        <a href="{{ printf "reference-architectures/%s/" $c.spec.spec.architecture.pattern | relURL }}">blueprint guidance</a>.</p>
+    </div>
+  {{ else }}
+
+    <p class="muted">
+      Run <code>{{ $ev.run_id }}</code> · {{ substr $ev.run_at 0 10 }} ({{ $ev.age_days }} days ago)
+      · version {{ $ev.version }} · model <code>{{ $ev.model }}</code>
+      {{ with $ev.model_build }}(build <code>{{ . }}</code>){{ end }}
+      {{ if gt $ev.age_days 30 }}<span class="badge warn">stale</span>{{ end }}
+    </p>
+
+    <div class="eval-headline">
+      {{ with $ev.totals.pass_rate }}
+      <div class="eval-metric"><span class="k">Pass rate</span><span class="v">{{ printf "%.1f%%" (mul . 100) }}</span>
+        {{ $st.charts.sparklines.pass_rate | safeHTML }}</div>
+      {{ end }}
+      {{ with $ev.totals.coverage }}
+      <div class="eval-metric"><span class="k">Coverage</span><span class="v">{{ printf "%.0f%%" (mul . 100) }}</span>
+        {{ $st.charts.sparklines.coverage | safeHTML }}</div>
+      {{ end }}
+      {{ with $ev.totals.hallucination_rate }}
+      <div class="eval-metric"><span class="k">Hallucination</span><span class="v">{{ printf "%.1f%%" (mul . 100) }}</span>
+        {{ $st.charts.sparklines.hallucination_rate | safeHTML }}</div>
+      {{ end }}
+      {{ with $ev.totals.p95_latency_ms }}
+      <div class="eval-metric"><span class="k">p95 latency</span><span class="v">{{ printf "%.1fs" (div (float .) 1000) }}</span>
+        {{ $st.charts.sparklines.p95_latency_ms | safeHTML }}</div>
+      {{ end }}
+      {{ with $ev.totals.cost_per_case }}
+      <div class="eval-metric"><span class="k">Cost / case</span><span class="v">£{{ printf "%.3f" . }}</span>
+        {{ $st.charts.sparklines.cost_per_case | safeHTML }}</div>
+      {{ end }}
+    </div>
+
+    {{ with $st.charts.trends.pass_rate }}
+    <figure class="chart-figure">
+      {{ . | safeHTML }}
+      <figcaption>Pass rate over the last {{ len $st.evaluation_trend }} runs. Vertical pins mark releases
+        and model-build changes — the two most common causes of movement that are not the harness's doing.</figcaption>
+    </figure>
+    <details class="chart-data">
+      <summary>Chart data</summary>
+      <table class="data">
+        <thead><tr><th>Run</th><th>Version</th><th>Model build</th><th>Pass rate</th><th>Coverage</th><th>p95 ms</th><th>Cost</th></tr></thead>
+        <tbody>
+        {{ range (first 12 (sort $st.evaluation_trend "run" "desc")) }}
+          <tr><td>{{ .run }}</td><td>{{ .version }}</td><td>{{ .model_build }}</td>
+            <td>{{ with .pass_rate }}{{ printf "%.3f" . }}{{ end }}</td>
+            <td>{{ with .coverage }}{{ printf "%.2f" . }}{{ end }}</td>
+            <td>{{ .p95_latency_ms }}</td>
+            <td>{{ with .cost_per_case }}{{ printf "%.3f" . }}{{ end }}</td></tr>
+        {{ end }}
+        </tbody>
+      </table>
+    </details>
+    {{ end }}
+
+    <h3>Suites</h3>
+    {{ range $ev.suites }}
+    <details class="suite" {{ if eq .kind "golden" }}open{{ end }}>
+      <summary>
+        <strong>{{ .id }}</strong> <span class="badge">{{ .kind }}</span>
+        <span class="muted">{{ .cases.passed }}/{{ .cases.total }} cases ·
+          dataset {{ .dataset.id }}@{{ .dataset.version }} ({{ .dataset.size }},
+          {{ .dataset.provenance }}, {{ .dataset.classification }})</span>
+      </summary>
+      <table class="data">
+        <thead><tr><th>Metric</th><th>Value</th><th>Gate</th><th>Status</th><th>Judge</th></tr></thead>
+        <tbody>
+        {{ range $name, $m := .metrics }}
+          <tr>
+            <td><code>{{ $name }}</code></td>
+            <td>{{ $m.value }}{{ with $m.ci95 }} <span class="muted small">[{{ index . 0 }}, {{ index . 1 }}]</span>{{ end }}</td>
+            <td>{{ with $m.threshold }}{{ . }} <span class="muted small">({{ $m.direction }})</span>{{ else }}—{{ end }}</td>
+            <td><span class="status status-{{ $m.status | default "not-gated" }}">{{ $m.status | default "not-gated" }}</span></td>
+            <td class="muted small">{{ with $m.judge }}{{ . }}{{ end }}</td>
+          </tr>
+        {{ end }}
+        </tbody>
+      </table>
+      {{ with .failures }}
+      <h4>Failures ({{ len . }} shown)</h4>
+      <ul class="failures">
+        {{ range . }}
+        <li><code>{{ .case_id }}</code> <span class="badge sm">{{ .category }}</span> {{ .reason }}</li>
+        {{ end }}
+      </ul>
+      <p class="muted small">Published deliberately: failure categories are how an adopter judges whether
+      the failure modes matter for their documents.</p>
+      {{ end }}
+    </details>
+    {{ end }}
+
+    {{ with $ev.human_review }}
+    <div class="callout">
+      <h3>Human review</h3>
+      <p>{{ .sample_size }} cases reviewed by {{ delimit .reviewers ", " }} on {{ .reviewed_at }}.
+      Agreement with the automated verdict {{ printf "%.0f%%" (mul .agreement_with_automated 100) }}.
+      Verdict: <strong>{{ .verdict }}</strong>.</p>
+    </div>
+    {{ end }}
+
+    <p class="muted small">
+      All figures come from machine-readable reports emitted by the harness pipeline and collected by the
+      indexer. <a href="{{ $repo }}/-/tree/main/evaluations">Suite definitions and thresholds</a> ·
+      <a href="{{ $repo }}/-/tree/main/evaluations/results">raw reports</a>.
+    </p>
+  {{ end }}
+</section>

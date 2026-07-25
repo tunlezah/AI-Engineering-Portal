@@ -1,0 +1,4 @@
+model: claude-sonnet-5
+max_findings: 15
+cost_ceiling_gbp: 1.50
+concurrency: 8

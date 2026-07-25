@@ -36,6 +36,14 @@ workflow:
     - if: $CI_MERGE_REQUEST_IID
       variables: { MODE: content }
 
+unit:
+  stage: crawl
+  script:
+    - python3 -m pytest tests/ -q --junitxml=reports/junit.xml
+    # The scoring rubric and lifecycle gates are the most contested part of the
+    # system; they are unit-tested against fixtures on every run.
+  artifacts: { when: always, reports: { junit: reports/junit.xml } }
+
 # --------------------------------------------------------------------------
 # 1. CRAWL — discover harnesses via the GitLab API (self-hosted, on-network)
 # --------------------------------------------------------------------------
@@ -44,10 +52,11 @@ crawl:
   script:
     - |
       if [ "$MODE" = "incremental" ]; then
-        registryctl crawl --project "$UPSTREAM_HARNESS_PROJECT" \
-                          --base snapshot/ --out crawl/
+        registryctl crawl --groups groups.yaml \
+                          --project "$UPSTREAM_HARNESS_PROJECT" \
+                          --etag-cache .cache/etags.json --out crawl/
       else
-        registryctl crawl --groups groups.yaml --concurrency 16 \
+        registryctl crawl --groups groups.yaml \
                           --etag-cache .cache/etags.json --out crawl/
       fi
   cache:
@@ -64,14 +73,16 @@ index:
   stage: index
   needs: [crawl]
   script:
+    # Reference data (taxonomy, rubric, schema) comes from schema/; the sibling
+    # registry exports and platform catalogues come from vendor/. Both are
+    # committed, so an index run is reproducible from the repository alone.
     - registryctl index
+        --schema schema/
+        --vendor vendor/
         --crawl crawl/
-        --taxonomy schema/taxonomy.yaml
-        --rubric schema/quality-rubric.yaml
         --governance governance/
-        --skills-index vendor/skill-marketplace/index.json
-        --plugins-index vendor/plugin-marketplace/index.json
         --out snapshot/
+    - registryctl report --snapshot snapshot/
     # snapshot/ contains:
     #   registry.lock.yaml            id -> project, sha, tag, manifest digest
     #   harnesses/<id>.json           normalised card (spec + computed status)
@@ -99,17 +110,23 @@ validate:snapshot:
   stage: validate
   needs: [index]
   script:
-    - registryctl verify-snapshot snapshot/       # referential integrity, no dangling refs, no dep cycles
-    - registryctl diff-report --base $SNAPSHOT_BRANCH --head snapshot/ --out reports/diff.md
-    # Fails the pipeline if > 10% of harnesses would disappear: protects against
-    # a bad crawl (expired token, group rename) silently emptying the registry.
-    - registryctl guard-mass-change --max-removed-pct 10
+    # Referential integrity, dependency cycles, duplicate ids — and the
+    # mass-change guard, which fails the pipeline if more than 10% of harnesses
+    # would disappear. An expired token must not silently empty the registry.
+    - git fetch origin $SNAPSHOT_BRANCH && git worktree add .base origin/$SNAPSHOT_BRANCH
+    - registryctl verify-snapshot --snapshot snapshot/ --base .base/ --max-removed-pct 10
   artifacts: { when: always, paths: [reports/], expire_in: 30 days }
 
 validate:mr-comment:
   stage: validate
-  needs: [validate:snapshot]
-  script: [registryctl post-mr-note reports/diff.md]
+  needs: [index]
+  script:
+    # A registry MR (taxonomy, rubric, governance record) changes computed state
+    # across the estate. Post the resulting diff on the MR so a reviewer sees
+    # which harnesses move before merging, not after.
+    - registryctl report --snapshot snapshot/ --full > reports/index-report.txt
+    - registryctl post-mr-note reports/index-report.txt
+  artifacts: { when: always, paths: [reports/] }
   rules: [{ if: $CI_MERGE_REQUEST_IID }]
 
 # --------------------------------------------------------------------------
@@ -120,20 +137,22 @@ build:site:
   needs: [index]
   image: $HUGO_IMAGE
   script:
-    - registryctl emit-content --snapshot snapshot/ --out content/generated/
-    - hugo --minify --gc --destination public --baseURL "$REGISTRY_BASE_URL"
-  artifacts: { paths: [public/], expire_in: 7 days }
+    - registryctl emit-content --snapshot snapshot/ --site site/
+    - cd site && hugo --minify --gc --destination public --baseURL "$REGISTRY_BASE_URL"
+  artifacts: { paths: [site/public/], expire_in: 7 days }
 
 build:search:
   stage: build
   needs: [build:site]
   image: $PAGEFIND_IMAGE
   script:
-    - pagefind --site public --output-subdir _pagefind --force-language en
-    # The compact facet payload is produced by the indexer, not Pagefind:
-    - cp snapshot/catalog.json public/catalog.json
-    - gzip -9 -k public/catalog.json
-  artifacts: { paths: [public/], expire_in: 7 days }
+    # Full-text over rendered documentation. The compact facet payload
+    # (catalog.json) is produced by the indexer and copied in by emit-content;
+    # Pagefind never sees the metadata, and the browser never downloads the
+    # full-text index unless a query needs it.
+    - pagefind --site site/public --output-subdir _pagefind --force-language en
+    - gzip -9 -k site/public/catalog.json
+  artifacts: { paths: [site/public/], expire_in: 7 days }
 
 # --------------------------------------------------------------------------
 # 5. VERIFY — never ship a broken registry
@@ -142,10 +161,10 @@ verify:site:
   stage: verify
   needs: [build:search]
   script:
-    - registryctl check-links public/ --offline --fail-on-external
-    - registryctl check-a11y public/ --sample 40 --standard wcag21aa
-    - registryctl check-budget public/ --max-page-kb 400 --max-catalog-mb 6
-    - registryctl check-no-external-assets public/    # hard fail on any http(s):// asset reference
+    # Internal links, external-asset references (the check that makes "no CDN"
+    # real rather than aspirational), page-weight and catalogue budgets, and a
+    # static accessibility sample. All blocking.
+    - registryctl verify-site --public site/public --max-page-kb 400 --max-catalog-mb 6 --a11y-sample 40
   artifacts: { when: always, paths: [reports/], expire_in: 30 days }
 
 # --------------------------------------------------------------------------
@@ -154,7 +173,9 @@ verify:site:
 pages:
   stage: deploy
   needs: [build:search, verify:site]
-  script: [echo "Publishing $(find public -name '*.html' | wc -l) pages"]
+  script:
+    - echo "Publishing $(find site/public -name '*.html' | wc -l) pages"
+    - mv site/public public          # GitLab Pages serves the `public/` directory
   artifacts: { paths: [public/] }
   environment:
     name: registry
@@ -167,7 +188,7 @@ pages:
 pages:review:
   stage: deploy
   needs: [build:search]
-  script: [echo review app]
+  script: [mv site/public public]
   artifacts: { paths: [public/] }
   pages:
     path_prefix: "mr-$CI_MERGE_REQUEST_IID"

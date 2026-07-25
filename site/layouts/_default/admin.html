@@ -1,0 +1,100 @@
+{{ define "main" }}
+{{ $r := .Site.Data.registry }}
+{{ $rep := .Site.Data.index_report }}
+<header class="page-head">
+  <h1>{{ .Title }}</h1>
+  {{ with .Content }}<div class="prose">{{ . }}</div>{{ end }}
+  <p class="muted">Index run {{ $rep.generated_at }}. Visible to everyone — a registry that hides its own
+  health degrades silently, and silent degradation is how catalogues die.</p>
+</header>
+
+<section class="stats">
+  {{ range $k, $v := $rep.totals }}
+  <div class="stat {{ if and (ne $v 0) (in (slice "invalid" "overdue_reviews" "dependency_cycles" "duplicate_ids" "dangling_dependencies") $k) }}bad{{ end }}">
+    <span class="n">{{ $v }}</span><span class="l">{{ replace $k "_" " " }}</span>
+  </div>
+  {{ end }}
+</section>
+
+<section>
+  <h2>Manifests failing validation</h2>
+  {{ with $rep.invalid }}
+  {{ range . }}
+  <details open>
+    <summary><strong>{{ .id }}</strong> <span class="muted">{{ .project }}</span></summary>
+    <ul class="findings">
+      {{ range .findings }}<li><span class="status status-{{ .severity }}">{{ .severity }}</span>
+        <code>{{ .code }}</code> {{ .message }}{{ with .path }} <span class="muted small">({{ . }})</span>{{ end }}</li>{{ end }}
+    </ul>
+  </details>
+  {{ end }}
+  {{ else }}<p class="muted">None. Every indexed manifest validates.</p>{{ end }}
+</section>
+
+<section>
+  <h2>Over-claimed maturity (auto-downgraded)</h2>
+  <p class="muted">The indexer downgrades a declaration the evidence does not support, and never upgrades one.
+  Promotion is a human act with a record; demotion is a fact.</p>
+  {{ with $rep.downgraded }}
+  <table class="data">
+    <thead><tr><th>Harness</th><th>Declared</th><th>Published as</th><th>Why</th></tr></thead>
+    <tbody>
+    {{ range . }}
+      <tr><td><a href="{{ printf "harnesses/%s/" .id | relURL }}">{{ .id }}</a></td>
+        <td>{{ .declared }}</td><td><span class="badge lc lc-{{ .effective }}">{{ .effective }}</span></td>
+        <td class="small">{{ delimit .reasons " · " }}</td></tr>
+    {{ end }}
+    </tbody>
+  </table>
+  {{ else }}<p class="muted">None.</p>{{ end }}
+</section>
+
+<section>
+  <h2>Governance review debt</h2>
+  {{ with $rep.overdue_reviews }}
+  <table class="data">
+    <thead><tr><th>Harness</th><th>Due</th><th>Owner</th></tr></thead>
+    <tbody>{{ range . }}<tr><td><a href="{{ printf "harnesses/%s/" .id | relURL }}">{{ .id }}</a></td>
+      <td class="bad">{{ .due }}</td><td>{{ .owner }}</td></tr>{{ end }}</tbody>
+  </table>
+  {{ else }}<p class="muted">No overdue reviews.</p>{{ end }}
+</section>
+
+<section>
+  <h2>Unresolved references</h2>
+  <div class="two-col">
+    <div>
+      <h3>Plugin ranges that do not resolve</h3>
+      <ul>{{ range $rep.unresolved_plugins }}
+        <li><a href="{{ printf "harnesses/%s/" .harness | relURL }}">{{ .harness }}</a> →
+          <code>{{ .plugin }} {{ .range }}</code></li>
+      {{ else }}<li class="muted">None.</li>{{ end }}</ul>
+    </div>
+    <div>
+      <h3>Dependencies on unknown harnesses</h3>
+      <ul>{{ range $rep.dangling_dependencies }}
+        <li>{{ .harness }} → <code>{{ .depends_on }}</code></li>
+      {{ else }}<li class="muted">None.</li>{{ end }}</ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Warnings</h2>
+  {{ with $rep.warnings }}
+  <ul class="findings">
+    {{ range . }}<li><a href="{{ printf "harnesses/%s/" .id | relURL }}">{{ .id }}</a>:
+      {{ delimit .warnings " · " }}</li>{{ end }}
+  </ul>
+  {{ else }}<p class="muted">None.</p>{{ end }}
+</section>
+
+<section>
+  <h2>Not yet evaluated</h2>
+  <p class="muted">Indexed and discoverable, but with no measured evidence. This list should shrink.</p>
+  <ul class="inline-list">
+    {{ range $rep.unevaluated }}<li><a href="{{ printf "harnesses/%s/" . | relURL }}">{{ . }}</a></li>
+    {{ else }}<li class="muted">None.</li>{{ end }}
+  </ul>
+</section>
+{{ end }}

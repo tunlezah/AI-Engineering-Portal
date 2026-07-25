@@ -1,0 +1,32 @@
+apiVersion: harness.registry.acme.internal/v1
+kind: Workflow
+id: code-review-assistant
+version: 1.6.1
+inputs: [merge_request, focus]
+budget:
+  max_cost_gbp: "{{ config.cost_ceiling_gbp }}"
+  on_exceeded: return-partial
+steps:
+  - id: context
+    uses: plugin:repo-context@^2.3.0
+    with: {merge_request: "{{ inputs.merge_request }}", depth: dependency-closure}
+  - id: analyse
+    uses: model
+    with: {prompt: prompts/review.md, model: "{{ config.model }}", response_schema: schemas/finding.json}
+  - id: reproduce
+    guardrail: reproduce-before-claiming
+    uses: plugin:test-runner@^1.5.0
+    with: {sandbox: true, timeout_s: 240}
+    # A finding claiming a behavioural defect that does not reproduce is
+    # downgraded to an observation rather than emitted as a defect.
+  - id: redact
+    guardrail: no-secret-echo
+    uses: code
+    with: {script: workflows/steps/no_secrets.py, rules: guardrails/no-secrets.yaml}
+  - id: budget-check
+    guardrail: cost-ceiling
+    uses: code
+    with: {script: workflows/steps/budget.py, ceiling: "{{ config.cost_ceiling_gbp }}"}
+outputs:
+  findings: "{{ steps.redact.findings }}"
+  summary: "{{ steps.redact.summary }}"

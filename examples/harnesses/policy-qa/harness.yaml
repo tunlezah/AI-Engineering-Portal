@@ -1,0 +1,65 @@
+apiVersion: harness.registry.acme.internal/v1
+kind: Harness
+metadata:
+  id: policy-qa
+  name: HR Policy Q&A
+  summary: Answers employee questions about HR policy with citations to the policy document and version.
+  owner: group:people-tech
+  maintainers: ["@c.mbeki", "@j.rousseau"]
+  team: people-tech
+  tags: [policy, hr, question-answering, citations]
+spec:
+  version: 1.4.0
+  lifecycle: deprecated
+  domains:
+    business: [hr-people, knowledge]
+    technical: [rag, summarisation]
+  architecture: {pattern: rag}
+  models:
+    supported: [claude-sonnet-5]
+    default: claude-sonnet-5
+  runtimes: [agent-sdk-python]
+  plugins:
+    required:
+      - {id: hr-policy-index, range: "^0.9.0", purpose: "Vector index over HR policy documents.", trust_tier: community}
+  retrieval:
+    enabled: true
+    strategy: vector
+    index: hr-policy-v3
+    embedding_model: internal-embed-v3
+    top_k: 5
+  interfaces:
+    inputs:
+      - {name: question, type: string, description: "Employee question.", required: true}
+      - {name: country, type: string, description: "Employment jurisdiction; policies differ.", required: true}
+    outputs:
+      - {name: answer, type: string, format: markdown, description: "Answer with policy citations."}
+      - {name: citations, type: array, description: "Policy id, section and version."}
+  guardrails:
+    - {id: cite-policy-version, type: grounding-check, enforcement: blocking, implemented_by: workflows/answer.yaml}
+    - {id: no-individual-advice, type: output-filter, enforcement: blocking, implemented_by: guardrails/no-advice.yaml}
+    - {id: redact-employee-identifiers, type: pii-redaction, enforcement: blocking, implemented_by: workflows/answer.yaml}
+  security:
+    classification: internal
+    risk_level: medium
+    data_types: [employee-pii, internal]
+    human_review: recommended
+    egress: [none]
+  operations:
+    estimated_cost: {unit: per-invocation, value: 0.011, currency: GBP, basis: "Median question, 2026-Q1 sample."}
+    estimated_latency: {p50_ms: 2400, p95_ms: 5900, measured_on: "2026-01-20"}
+    support: none
+  limitations:
+    - "UK and Ireland policies only; other jurisdictions were never indexed."
+    - "Cannot answer questions about an individual's own employment terms."
+    - "Policy index refresh is manual and has lagged publication by up to three weeks."
+  deprecation:
+    since: "2026-06-01"
+    replaced_by: research-brief
+    removal_after: "2026-12-01"
+    migration_guide: docs/migration.md
+  licensing: {license: ACME-Internal-1.0, third_party_review: false}
+  links:
+    repository: https://gitlab.acme.internal/ai-platform/harnesses/people/policy-qa
+    documentation: docs/index.md
+    support_channel: "#people-tech"

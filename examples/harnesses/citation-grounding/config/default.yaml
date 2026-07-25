@@ -1,0 +1,3 @@
+model: claude-sonnet-5
+mode: exact
+min_span_tokens: 6

@@ -1,0 +1,16 @@
+{{/* One harness in a list. Takes a summary dict (from registry.json) or a Page. */}}
+{{ $h := .h }}
+<li class="hcard">
+  <div class="hcard-head">
+    <a class="hcard-title" href="{{ printf "harnesses/%s/" $h.id | relURL }}">{{ $h.name }}</a>
+    <span class="badge lc lc-{{ $h.lifecycle }}">{{ $h.lifecycle }}</span>
+  </div>
+  <p class="hcard-summary">{{ $h.summary }}</p>
+  <p class="hcard-meta">
+    <span title="Quality score">Q {{ $h.quality }}{{ with $h.band }} · {{ . }}{{ end }}</span>
+    {{ with $h.pass_rate }}<span title="Latest pass rate">pass {{ printf "%.0f%%" (mul . 100) }}</span>{{ end }}
+    <span>{{ $h.consumers }} consumer{{ if ne $h.consumers 1 }}s{{ end }}</span>
+    {{ with $h.team }}<span><a href="{{ printf "teams/%s/" . | relURL }}">{{ . }}</a></span>{{ end }}
+    {{ with $h.updated }}<span>updated {{ . }}</span>{{ end }}
+  </p>
+</li>

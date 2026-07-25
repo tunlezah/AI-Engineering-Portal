@@ -1,0 +1,63 @@
+{{ define "main" }}
+<header class="page-head">
+  <h1>{{ .Title }}</h1>
+  {{ with .Content }}<div class="prose">{{ . }}</div>{{ end }}
+</header>
+
+<div id="browse" class="browse" data-catalog="{{ "catalog.json" | relURL }}">
+  <form class="browse-search" role="search" onsubmit="return false">
+    <label class="visually-hidden" for="browse-q">Search</label>
+    <input type="search" id="browse-q" placeholder='e.g. rag lifecycle:certified quality:&gt;85 plugin:pii-redactor'>
+    <button type="button" id="browse-clear" class="button">Clear</button>
+  </form>
+  <p class="query-help muted">
+    Bare words search names, summaries and tags. <code>field:value</code> filters
+    (<code>owner</code>, <code>team</code>, <code>business</code>, <code>technical</code>,
+    <code>pattern</code>, <code>model</code>, <code>plugin</code>, <code>lifecycle</code>,
+    <code>classification</code>, <code>risk</code>, <code>approval</code>, <code>tag</code>).
+    <code>quality:&gt;80</code>, <code>pass:&gt;0.9</code>, <code>consumers:&gt;0</code> and
+    <code>updated:&lt;90d</code> take comparisons. Prefix with <code>-</code> to exclude.
+    Every search is a shareable URL.
+  </p>
+
+  <div class="browse-layout">
+    <aside class="facets" id="facets" aria-label="Filters">
+      <noscript><p class="muted">Faceted browse needs JavaScript. The
+        <a href="{{ "categories/" | relURL }}">categories</a>, <a href="{{ "teams/" | relURL }}">teams</a> and
+        <a href="{{ "harnesses/" | relURL }}">full harness list</a> are static pages that work without it.</p></noscript>
+    </aside>
+
+    <section class="results" aria-live="polite">
+      <div class="results-head">
+        <p id="result-count" class="muted">Loading catalogue…</p>
+        <label class="sort">Sort
+          <select id="sort">
+            <option value="relevance">Relevance</option>
+            <option value="quality">Quality</option>
+            <option value="consumers">Consumers</option>
+            <option value="updated">Recently updated</option>
+            <option value="pass">Pass rate</option>
+            <option value="name">Name</option>
+          </select>
+        </label>
+      </div>
+      <ul id="results" class="hlist"></ul>
+    </section>
+  </div>
+</div>
+
+{{/* Progressive enhancement: the full list is server-rendered, so browse is
+     usable with JavaScript disabled and crawlable by the full-text indexer. */}}
+<noscript>
+<ul class="hlist">
+  {{ range (where .Site.RegularPages "Type" "harnesses").ByTitle }}
+    {{ $c := index $.Site.Data.cards .Params.id }}
+    {{ partial "harness-card.html" (dict "h" (dict
+        "id" .Params.id "name" .Title "summary" .Params.summary
+        "lifecycle" $c.status.lifecycle.effective "quality" $c.status.quality.score
+        "band" $c.status.quality.band "consumers" $c.status.consumer_count
+        "team" (index $c.spec.metadata "team") "updated" "" "pass_rate" false)) }}
+  {{ end }}
+</ul>
+</noscript>
+{{ end }}

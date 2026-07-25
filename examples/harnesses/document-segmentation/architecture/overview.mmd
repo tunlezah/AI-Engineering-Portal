@@ -1,0 +1,7 @@
+flowchart LR
+    D[Parsed text + anchors] --> P{Structure detected?}
+    P -->|yes| S[Segment on structure]
+    P -->|no| F[Paragraph fallback]
+    S --> L[Link continuations]
+    F --> L
+    L --> O[(Segments)]

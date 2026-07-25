@@ -1,0 +1,10 @@
+project_path: ai-platform/harnesses/knowledge/research-brief
+web_url: https://gitlab.acme.internal/ai-platform/harnesses/knowledge/research-brief
+commit: b6031ea9fc7d24851930ab4c7e26df5081ac9317
+last_activity_at: "2026-07-11T19:45:00Z"
+pipeline: {status: success}
+releases: []
+signed_tag: false
+sbom_published: false
+open_issue_stats: {counts: {opened: 3}}
+median_issue_response_days: 3.0

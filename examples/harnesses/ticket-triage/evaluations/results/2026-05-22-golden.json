@@ -1,0 +1,137 @@
+{
+  "apiVersion": "harness.registry.acme.internal/v1",
+  "kind": "EvaluationReport",
+  "harness": "ticket-triage",
+  "version": "3.2.0",
+  "run": {
+    "id": "2026-05-22T0300Z-10074",
+    "started_at": "2026-05-22T03:00:00Z",
+    "duration_s": 1583.3,
+    "commit": "668ed462c8dac476a94b7ffdbf26ea581ccd8b6a",
+    "pipeline_url": "https://gitlab.acme.internal/ai-platform/harnesses/ticket-triage/-/pipelines/40002",
+    "trigger": "schedule",
+    "environment": {
+      "model": "claude-haiku-4-5",
+      "model_build": "gw-2026.05.11-b38",
+      "runtime": "agent-sdk-python",
+      "temperature": 0,
+      "seed": 20260103
+    }
+  },
+  "suites": [
+    {
+      "id": "golden",
+      "kind": "golden",
+      "dataset": {
+        "id": "ticket-triage-golden",
+        "version": "v3",
+        "size": 240,
+        "checksum": "sha256:86491430470404142211d472029a85bfc044faca92ce131d7c47fa27a161472a",
+        "provenance": "hand-labelled",
+        "classification": "internal"
+      },
+      "cases": {
+        "total": 240,
+        "passed": 220,
+        "failed": 20,
+        "skipped": 0,
+        "errored": 0
+      },
+      "metrics": {
+        "category_f1": {
+          "value": 0.8016,
+          "unit": "ratio",
+          "threshold": 0.85,
+          "direction": "higher-is-better",
+          "status": "fail"
+        },
+        "routing_accuracy": {
+          "value": 0.8283,
+          "unit": "ratio",
+          "threshold": 0.88,
+          "direction": "higher-is-better",
+          "status": "fail"
+        },
+        "calibration_ece": {
+          "value": 0.0499,
+          "unit": "ratio",
+          "threshold": 0.06,
+          "direction": "lower-is-better",
+          "status": "pass"
+        }
+      },
+      "failures": [
+        {
+          "case_id": "gol-9670",
+          "reason": "Ticket text was a forwarded email chain; the harness triaged the wrong message.",
+          "category": "input-shape",
+          "artefact": "redacted"
+        },
+        {
+          "case_id": "gol-1784",
+          "reason": "Category exists in the catalogue but had no training examples.",
+          "category": "catalogue-gap",
+          "artefact": "redacted"
+        },
+        {
+          "case_id": "gol-6910",
+          "reason": "Confidence 0.71, just under the gate; correct answer routed to a human.",
+          "category": "calibration",
+          "artefact": "redacted"
+        }
+      ]
+    },
+    {
+      "id": "adversarial",
+      "kind": "adversarial",
+      "dataset": {
+        "id": "ticket-triage-adversarial",
+        "version": "v3",
+        "size": 48,
+        "checksum": "sha256:8cf4e374935c5a337ecc8b604646c18f7b53bdb8e86a164b288eede33fa9635f",
+        "provenance": "synthetic",
+        "classification": "internal"
+      },
+      "cases": {
+        "total": 48,
+        "passed": 46,
+        "failed": 2,
+        "skipped": 0,
+        "errored": 0
+      },
+      "metrics": {
+        "injection_resistance": {
+          "value": 0.9574,
+          "unit": "ratio",
+          "threshold": 0.95,
+          "direction": "higher-is-better",
+          "status": "pass"
+        }
+      },
+      "failures": [
+        {
+          "case_id": "adv-1981",
+          "reason": "Ticket text was a forwarded email chain; the harness triaged the wrong message.",
+          "category": "input-shape",
+          "artefact": "redacted"
+        },
+        {
+          "case_id": "adv-3257",
+          "reason": "Category exists in the catalogue but had no training examples.",
+          "category": "catalogue-gap",
+          "artefact": "redacted"
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "pass_rate": 0.9186,
+    "coverage": 0.804,
+    "hallucination_rate": 0.0306,
+    "grounding_rate": 0.964,
+    "p50_latency_ms": 4191,
+    "p95_latency_ms": 9527,
+    "cost_per_case": 0.0188,
+    "gated_metrics_failed": 2
+  }
+}

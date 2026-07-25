@@ -1,0 +1,90 @@
+{{ define "main" }}
+{{ $r := .Site.Data.registry }}
+<section class="hero-home">
+  <h1>Complete implementations, not fragments.</h1>
+  <p class="lede">
+    Prompts live in the Prompt Library. Tools live in the Plugin Marketplace. Business capabilities live in
+    the Skill Marketplace. <strong>Implementations live here</strong> — orchestration, retrieval, guardrails,
+    evaluations and tests, versioned together and evidenced.
+  </p>
+  <form class="home-search" action="{{ "browse/" | relURL }}" method="get" role="search">
+    <label class="visually-hidden" for="home-q">Search harnesses</label>
+    <input type="search" id="home-q" name="q" placeholder="Search by name, domain, plugin, model…" autofocus>
+    <button type="submit" class="button primary">Search</button>
+  </form>
+  <p class="quick-links">
+    <a href="{{ "browse/?lc=certified" | relURL }}">Certified harnesses</a>
+    <a href="{{ "reference-architectures/" | relURL }}">Pick an architecture</a>
+    <a href="{{ "docs/contributing/" | relURL }}">Publish a harness</a>
+    <a href="{{ "evaluations/" | relURL }}">Compare evaluations</a>
+  </p>
+</section>
+
+{{ with $r }}
+<section class="stats" aria-label="Registry statistics">
+  <div class="stat"><span class="n">{{ .totals.harnesses }}</span><span class="l">harnesses</span></div>
+  <div class="stat"><span class="n">{{ .totals.certified }}</span><span class="l">certified</span></div>
+  <div class="stat"><span class="n">{{ .totals.evaluated }}</span><span class="l">publishing evaluations</span></div>
+  <div class="stat"><span class="n">{{ .totals.consumers }}</span><span class="l">skills built on them</span></div>
+  <div class="stat"><span class="n">{{ .totals.mean_quality }}</span><span class="l">mean quality</span></div>
+</section>
+
+<section class="lifecycle-mix">
+  <h2>The estate at a glance</h2>
+  {{ .lifecycle_dist | safeHTML }}
+  <ul class="legend">
+    {{ range $k, $v := .lifecycles }}<li><span class="dot lc-{{ $k }}"></span>{{ $k }} ({{ $v }})</li>{{ end }}
+  </ul>
+  {{ if or .totals.invalid .totals.overdue_reviews }}
+  <p class="muted">
+    {{ with .totals.invalid }}{{ . }} manifest(s) failing validation · {{ end }}
+    {{ with .totals.overdue_reviews }}{{ . }} review(s) overdue · {{ end }}
+    <a href="{{ "admin/" | relURL }}">registry health</a>
+  </p>
+  {{ end }}
+</section>
+
+<div class="home-columns">
+  <section>
+    <h2>Most depended on</h2>
+    <ul class="hlist">{{ range .popular }}{{ partial "harness-card.html" (dict "h" .) }}{{ end }}</ul>
+  </section>
+  <section>
+    <h2>Recently updated</h2>
+    <ul class="hlist">{{ range .recent }}{{ partial "harness-card.html" (dict "h" .) }}{{ end }}</ul>
+  </section>
+</div>
+
+{{ with .regressions }}
+<section class="regressions">
+  <h2>Evaluation movement this week</h2>
+  <p class="muted">Pass rate down since the previous run. Attribution matters: a model-build change is not
+  the harness's fault, and the registry says so.</p>
+  <table class="data">
+    <thead><tr><th>Harness</th><th>Was</th><th>Now</th><th>Δ</th><th>Model build</th></tr></thead>
+    <tbody>
+    {{ range . }}
+      <tr>
+        <td><a href="{{ printf "harnesses/%s/" .id | relURL }}">{{ .name }}</a></td>
+        <td>{{ printf "%.3f" .from }}</td><td>{{ printf "%.3f" .to }}</td>
+        <td class="bad">{{ printf "%+.3f" .delta }}</td>
+        <td><code>{{ .model_build }}</code></td>
+      </tr>
+    {{ end }}
+    </tbody>
+  </table>
+</section>
+{{ end }}
+{{ end }}
+
+<section class="explain">
+  <h2>What is a harness?</h2>
+  <div class="four-up">
+    <div><h3>Prompt</h3><p>A reusable instruction. Copy it.</p></div>
+    <div><h3>Plugin</h3><p>A reusable tool. Call it.</p></div>
+    <div class="highlight"><h3>Harness</h3><p>A reusable <em>implementation</em>. Depend on it, fork it, compose it.</p></div>
+    <div><h3>Skill</h3><p>A reusable business capability. Enable it.</p></div>
+  </div>
+  <p class="muted">A skill is built on exactly one harness; many skills may share one. That sharing is the point.</p>
+</section>
+{{ end }}

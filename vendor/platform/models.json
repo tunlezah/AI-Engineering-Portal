@@ -1,0 +1,12 @@
+{
+  "_comment": "The internal model catalogue. Manifests reference these ids; they never reference vendor URLs or endpoints.",
+  "exported_at": "2026-07-24T02:00:00Z",
+  "models": [
+    {"id": "claude-opus-5", "class": "frontier", "context": 500000, "status": "available"},
+    {"id": "claude-sonnet-5", "class": "balanced", "context": 500000, "status": "available"},
+    {"id": "claude-haiku-4-5", "class": "fast", "context": 200000, "status": "available"},
+    {"id": "internal-embed-v3", "class": "embedding", "dimensions": 1024, "status": "available"},
+    {"id": "internal-rerank-v2", "class": "reranker", "status": "available"},
+    {"id": "internal-classifier-v1", "class": "classifier", "status": "deprecated"}
+  ]
+}

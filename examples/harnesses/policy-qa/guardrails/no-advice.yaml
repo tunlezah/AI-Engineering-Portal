@@ -1,0 +1,8 @@
+# Policy Q&A describes what policy says; it does not advise an individual on
+# their own circumstances. Deprecated harness — rules frozen.
+version: 2
+enforcement: blocking
+blocklist_phrases: ["in your case", "you are entitled to", "you should claim", "your manager must"]
+blocklist_patterns:
+  - {id: individual-advice, regex: "(?i)\\byour (contract|entitlement|notice period|case)\\b",
+     reason: "Individual employment advice is out of scope; route to HR Business Partner."}

@@ -1,0 +1,18 @@
+apiVersion: harness.registry.acme.internal/v1
+kind: Workflow
+id: document-segmentation
+version: 4.1.2
+inputs: [text, profile]
+steps:
+  - id: detect
+    uses: code
+    with: {script: workflows/steps/detect_structure.py, profile: "{{ inputs.profile }}"}
+  - id: split
+    uses: code
+    with: {script: workflows/steps/split.py, fallback: paragraph}
+  - id: cap
+    guardrail: max-segment-size
+    uses: code
+    with: {script: workflows/steps/cap.py, max_tokens: "{{ config.max_tokens }}"}
+outputs:
+  segments: "{{ steps.cap.segments }}"

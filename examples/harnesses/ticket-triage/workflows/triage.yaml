@@ -1,0 +1,38 @@
+apiVersion: harness.registry.acme.internal/v1
+kind: Workflow
+id: ticket-triage
+version: 3.2.0
+inputs: [ticket_id, channel]
+steps:
+  - id: fetch
+    uses: plugin:servicenow-connector@^2.4.0
+    with: {ticket: "{{ inputs.ticket_id }}"}
+  - id: redact
+    guardrail: customer-data-redaction
+    uses: plugin:pii-redactor@^2.0.0
+    with: {text: "{{ steps.fetch.description }}"}
+  - id: classify
+    uses: model
+    with: {prompt: prompts/classify.md, model: "{{ config.model }}", temperature: 0}
+  - id: gate
+    guardrail: confidence-gate
+    uses: code
+    with: {script: workflows/steps/gate.py, threshold: "{{ config.confidence_threshold }}"}
+    # Below the threshold the ticket goes to a human triager. The model
+    # classifies; code routes. A misclassification is a wrong suggestion,
+    # never a ticket in a queue the requester cannot reach.
+  - id: retrieve
+    uses: plugin:knowledge-search@^5.2.0
+    with: {query: "{{ steps.redact.text }}", top_k: "{{ config.retrieval.top_k }}"}
+  - id: summarise
+    uses: model
+    with: {prompt: prompts/summarise.md, model: "{{ config.model }}"}
+  - id: assign
+    guardrail: no-auto-close
+    uses: plugin:servicenow-connector@^2.4.0
+    with: {action: propose-routing, auto_close: false}
+outputs:
+  category: "{{ steps.classify.category }}"
+  routing: "{{ steps.gate.routing }}"
+  summary: "{{ steps.summarise.text }}"
+  audit_record: "{{ runtime.audit }}"

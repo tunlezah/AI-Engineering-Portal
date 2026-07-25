@@ -40,6 +40,12 @@ Nine decisions define the architecture. Everything else follows from them.
 Rollout is seven phases over roughly nine months, with a usable registry in
 **Phase 1 at ~4 engineer-weeks**. Steady-state ownership is ~0.5 FTE.
 
+**Phases 1–3 of this design are implemented in this repository** and build
+offline with `make all`: crawler, validator, scorer, lifecycle gating, indexer,
+snapshot, Hugo site, faceted search and the verification gates, over nine worked
+harnesses. See [Appendix C](#appendix-c--implementation-status) for what is
+built, what is stubbed, and where building it changed the design.
+
 ---
 
 ## 1. High-level architecture
@@ -2511,11 +2517,80 @@ data and schemas that outlive any of it.
 | [`schema/taxonomy.yaml`](../schema/taxonomy.yaml) | Business and technical taxonomy, reference architectures |
 | [`ci/harness-ci.yml`](../ci/harness-ci.yml) | Shared harness pipeline template |
 | [`ci/registry-ci.yml`](../ci/registry-ci.yml) | Registry crawl → index → build → deploy pipeline |
-| [`tools/registryctl/crawl.py`](../tools/registryctl/crawl.py) | Reference crawler (GitLab API, ETag-conditional) |
-| [`tools/registryctl/index.py`](../tools/registryctl/index.py) | Reference indexer: scoring, lifecycle, graph, catalog |
+| [`tools/registryctl/`](../tools/registryctl/) | The working implementation: `sources`, `crawl`, `validate`, `observe`, `score`, `index`, `content`, `charts`, `verify`, `cli` |
+| [`tools/dev/`](../tools/dev/) | Deterministic fixture generators (evaluation histories, blueprint pages) |
+| [`site/`](../site/) | Hugo site: templates, theme, vendored browser assets, faceted search |
+| [`tests/`](../tests/) | Scoring, lifecycle gating, validation rules, end-to-end pipeline |
+| [`governance/`](../governance/) | Approval and certification records, held outside the harness repos |
+| [`vendor/`](../vendor/) | Sibling registry exports and platform catalogues |
+| [`Makefile`](../Makefile) | `make all` — the same order CI runs |
 | [`examples/harnesses/contract-review/`](../examples/harnesses/contract-review/) | Complete worked example (28 files) |
 
-## Appendix C — Decision index
+## Appendix C — Implementation status
+
+The design is not only specified here; Phases 1–3 (plus the evaluation
+dashboards from Phase 4) are implemented in this repository and run offline.
+
+### Built and running
+
+| Component | Where | Notes |
+|---|---|---|
+| Discovery | `tools/registryctl/sources.py`, `crawl.py` | `LocalSource` (directory tree) and `GitLabSource` (ETag-conditional API walk) behind one `Project` record, so the pipeline is testable without GitLab |
+| Validation | `validate.py` | Three layers: JSON Schema, references, repository consistency. Same code runs in the harness pipeline and the indexer |
+| Observation | `observe.py` | Pure function from evidence to rubric signals — the enforcement point for D3 |
+| Scoring & gating | `score.py` | Rubric application, hard gates, auto-downgrade with per-tier reasons |
+| Indexing | `index.py` | Cards, relationship graph with cycle detection, catalogue, lockfile, index report |
+| Content adapters | `content.py`, `charts.py` | Hugo content and data, inline SVG trend charts and sparklines, generated Mermaid neighbourhood diagrams |
+| Verification | `verify.py` | Snapshot integrity, mass-change guard, link check, external-asset check, page budgets, static accessibility checks |
+| Site | `site/` | Hugo 0.148, hand-written theme (~20 KB CSS), vendored Mermaid and MiniSearch, light/dark, keyboard-operable facets, works with JavaScript disabled |
+| Search | `site/static/js/registry.js` | Facets, query language (`field:value`, ranges, negation), documented ranking, URL as state |
+| Tests | `tests/` | 77 tests over scoring, lifecycle gates, validation rules and the end-to-end pipeline |
+
+A build indexes 9 fixture harnesses (8 valid, 2 auto-downgraded, 1 invalid card),
+emits 172 pages in ~90 ms of Hugo time, and passes every gate with zero external
+asset references.
+
+### Stubbed or deferred
+
+| Not built | Why | Phase |
+|---|---|---|
+| `harnessctl` (harness-side runner, evaluator, lockfile writer) | Belongs to the harness toolchain, not the registry. The validator it needs is already shared | 2 |
+| Pagefind full-text | Wired in the pipeline; needs the vendored binary in the toolkit image | 3 |
+| Snapshot commit bot, MR notes | Requires a GitLab instance and a bot token | 1 |
+| Governance automation (review reminders, auto-deprecation) | Records and gates exist; the scheduled jobs that act on them do not | 5 |
+| Consumer notification, impact analysis, graph explorer | Graph and edges exist; the views and notifications do not | 6 |
+| Catalogue sharding, per-restricted-group site variants | Not needed below ~35,000 harnesses | 7 |
+
+### What building it changed
+
+Four design decisions moved because the implementation disagreed with the
+document. Each is a case where the prose was tidier than reality:
+
+1. **An unresolvable plugin range is a warning, not an error.** The document
+   treated it as a validation failure, which would hide the whole card. The card
+   is still worth reading; the plugin table shows `unresolved` and `/admin/`
+   lists it. Hiding a harness because a dependency published a bad version
+   over-corrects.
+2. **Guardrail wiring is checked against *evidence*, not only workflow steps.**
+   Cost ceilings and rate limits are enforced by configuration, so requiring a
+   `guardrail:` step produced false failures on correct harnesses. The check now
+   accepts a wired step, a plugin the manifest actually requires, or a file that
+   exists — and still fails a guardrail that points at nothing.
+3. **Invalid manifests get a card, not a hole.** The document implied they would
+   be flagged; in practice they must render, with the failing rules on the page,
+   or the registry looks healthier than the estate is.
+4. **Template section ids must be namespaced.** Rendering a repository README
+   inside a generated page collides `#overview`, `#configuration` and
+   `#evaluation`. Obvious in hindsight, invisible on paper — and now a blocking
+   duplicate-id check in `verify-site`.
+
+One more thing the build taught us, which is the argument for building early: a
+signal the crawler cannot observe passes silently. Two rubric signals
+(`quickstart-executable`, guardrail wiring) were scoring as satisfied because the
+crawler never fetched the files they inspect. A test caught it. On paper, both
+looked fine.
+
+## Appendix D — Decision index
 
 | ID | Decision | Section |
 |---|---|---|

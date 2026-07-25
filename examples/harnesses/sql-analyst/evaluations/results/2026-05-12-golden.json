@@ -1,0 +1,82 @@
+{
+  "apiVersion": "harness.registry.acme.internal/v1",
+  "kind": "EvaluationReport",
+  "harness": "sql-analyst",
+  "version": "0.9.2",
+  "run": {
+    "id": "2026-05-12T0300Z-10111",
+    "started_at": "2026-05-12T03:00:00Z",
+    "duration_s": 1153.4,
+    "commit": "207b62610bf2061c003a21e0bd61c5f127f15e14",
+    "pipeline_url": "https://gitlab.acme.internal/ai-platform/harnesses/sql-analyst/-/pipelines/40003",
+    "trigger": "schedule",
+    "environment": {
+      "model": "claude-opus-5",
+      "model_build": "gw-2026.05.11-b38",
+      "runtime": "agent-sdk-python",
+      "temperature": 0,
+      "seed": 20260104
+    }
+  },
+  "suites": [
+    {
+      "id": "golden",
+      "kind": "golden",
+      "dataset": {
+        "id": "sql-analyst-golden",
+        "version": "v3",
+        "size": 42,
+        "checksum": "sha256:7d675a2b41f95c30cc674684dfbf131ea97844012304ff5d90601ecc08443b44",
+        "provenance": "hand-labelled",
+        "classification": "internal"
+      },
+      "cases": {
+        "total": 42,
+        "passed": 33,
+        "failed": 9,
+        "skipped": 0,
+        "errored": 0
+      },
+      "metrics": {
+        "execution_accuracy": {
+          "value": 0.7773,
+          "unit": "ratio",
+          "threshold": 0.85,
+          "direction": "higher-is-better",
+          "status": "fail"
+        },
+        "result_exact_match": {
+          "value": 0.6972,
+          "unit": "ratio",
+          "threshold": 0.8,
+          "direction": "higher-is-better",
+          "status": "fail"
+        }
+      },
+      "failures": [
+        {
+          "case_id": "gol-5190",
+          "reason": "Question implied a metric not defined in the semantic layer.",
+          "category": "semantic-gap",
+          "artefact": "redacted"
+        },
+        {
+          "case_id": "gol-3145",
+          "reason": "Correct SQL, wrong interpretation of 'last quarter' (fiscal vs calendar).",
+          "category": "interpretation",
+          "artefact": "redacted"
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "pass_rate": 0.7824,
+    "coverage": 0.52,
+    "hallucination_rate": 0.0104,
+    "grounding_rate": 0.982,
+    "p50_latency_ms": 13624,
+    "p95_latency_ms": 30965,
+    "cost_per_case": 0.0858,
+    "gated_metrics_failed": 2
+  }
+}

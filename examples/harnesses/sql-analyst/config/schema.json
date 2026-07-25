@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "sql-analyst runtime configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["model"],
+  "properties": {
+    "model": {"type": "string"},
+    "concurrency": {"type": "integer", "minimum": 1, "maximum": 32, "default": 8},
+    "cost_ceiling_gbp": {"type": "number", "minimum": 0.01, "default": 2.0}
+  }
+}

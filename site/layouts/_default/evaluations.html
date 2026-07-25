@@ -1,0 +1,83 @@
+{{ define "main" }}
+{{ $r := .Site.Data.registry }}
+<header class="page-head">
+  <h1>{{ .Title }}</h1>
+  {{ with .Content }}<div class="prose">{{ . }}</div>{{ end }}
+</header>
+
+<section class="stats">
+  <div class="stat"><span class="n">{{ $r.totals.evaluated }}</span><span class="l">harnesses publishing evaluations</span></div>
+  <div class="stat"><span class="n">{{ $r.totals.unevaluated }}</span><span class="l">with none</span></div>
+  <div class="stat"><span class="n">{{ with $r.totals.mean_pass_rate }}{{ printf "%.1f%%" (mul . 100) }}{{ else }}—{{ end }}</span><span class="l">mean pass rate</span></div>
+  <div class="stat"><span class="n">{{ len $r.regressions }}</span><span class="l">recent regressions</span></div>
+</section>
+
+{{ with $r.regressions }}
+<section>
+  <h2>Regression radar</h2>
+  <table class="data">
+    <thead><tr><th>Harness</th><th>Was</th><th>Now</th><th>Δ</th><th>Version</th><th>Model build</th></tr></thead>
+    <tbody>
+    {{ range . }}
+      <tr><td><a href="{{ printf "harnesses/%s/" .id | relURL }}">{{ .name }}</a></td>
+      <td>{{ printf "%.3f" .from }}</td><td>{{ printf "%.3f" .to }}</td>
+      <td class="bad">{{ printf "%+.3f" .delta }}</td><td>{{ .version }}</td>
+      <td><code>{{ .model_build }}</code></td></tr>
+    {{ end }}
+    </tbody>
+  </table>
+</section>
+{{ end }}
+
+<section>
+  <h2>Leaderboards</h2>
+  <p class="muted">Ranked <em>within an architecture pattern only</em>. A global ranking that compares a SQL agent
+  to a contract reviewer is noise that people nonetheless act on.</p>
+  {{ range $r.leaderboards }}
+  <h3><a href="{{ printf "reference-architectures/%s/" .pattern | relURL }}">{{ .pattern }}</a></h3>
+  <table class="data">
+    <thead><tr><th>#</th><th>Harness</th><th>Pass rate</th><th>Quality</th><th>Lifecycle</th><th>Consumers</th></tr></thead>
+    <tbody>
+    {{ range $i, $e := .entries }}
+      <tr><td>{{ add $i 1 }}</td>
+        <td><a href="{{ printf "harnesses/%s/" $e.id | relURL }}">{{ $e.name }}</a></td>
+        <td>{{ with $e.pass_rate }}{{ printf "%.3f" . }}{{ else }}—{{ end }}</td>
+        <td>{{ $e.quality }}</td>
+        <td><span class="badge lc lc-{{ $e.lifecycle }}">{{ $e.lifecycle }}</span></td>
+        <td>{{ $e.consumers }}</td></tr>
+    {{ end }}
+    </tbody>
+  </table>
+  {{ else }}
+  <p class="muted">No pattern yet has two evaluated harnesses to compare.</p>
+  {{ end }}
+</section>
+
+<section>
+  <h2>Coverage gaps</h2>
+  <p class="muted">Where the evidence does not yet cover what the manifests claim.</p>
+  <div class="three-up">
+    <div>
+      <h3>Guardrails without tests</h3>
+      <ul>{{ range $r.coverage_gaps.untested_guardrails }}
+        <li><a href="{{ printf "harnesses/%s/" .id | relURL }}">{{ .id }}</a>
+          <span class="muted small">{{ delimit .guardrails ", " }}</span></li>
+      {{ else }}<li class="muted">None.</li>{{ end }}</ul>
+    </div>
+    <div>
+      <h3>Models declared but never evaluated</h3>
+      <ul>{{ range $r.coverage_gaps.unevaluated_models }}
+        <li><a href="{{ printf "harnesses/%s/" .id | relURL }}">{{ .id }}</a>
+          <span class="muted small">{{ delimit .models ", " }}</span></li>
+      {{ else }}<li class="muted">None.</li>{{ end }}</ul>
+    </div>
+    <div>
+      <h3>Fewer than three limitations</h3>
+      <ul>{{ range $r.coverage_gaps.few_limitations }}
+        <li><a href="{{ printf "harnesses/%s/" .id | relURL }}">{{ .id }}</a>
+          <span class="muted small">{{ .count }} declared</span></li>
+      {{ else }}<li class="muted">None.</li>{{ end }}</ul>
+    </div>
+  </div>
+</section>
+{{ end }}

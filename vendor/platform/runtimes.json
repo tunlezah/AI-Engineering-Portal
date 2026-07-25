@@ -1,0 +1,11 @@
+{
+  "exported_at": "2026-07-24T02:00:00Z",
+  "runtimes": [
+    {"id": "agent-sdk-python", "supported_until": "2028-01-01"},
+    {"id": "agent-sdk-typescript", "supported_until": "2028-01-01"},
+    {"id": "orchestrator-service", "supported_until": "2027-06-30"},
+    {"id": "notebook", "supported_until": "2027-01-01"},
+    {"id": "cli", "supported_until": "2028-01-01"},
+    {"id": "gitlab-ci", "supported_until": "2028-01-01"}
+  ]
+}

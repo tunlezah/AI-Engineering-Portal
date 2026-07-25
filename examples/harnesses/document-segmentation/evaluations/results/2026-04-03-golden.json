@@ -1,0 +1,82 @@
+{
+  "apiVersion": "harness.registry.acme.internal/v1",
+  "kind": "EvaluationReport",
+  "harness": "document-segmentation",
+  "version": "4.1.2",
+  "run": {
+    "id": "2026-04-03T0300Z-10000",
+    "started_at": "2026-04-03T03:00:00Z",
+    "duration_s": 1953.8,
+    "commit": "77e35c08b4f4ac25a7750c281ab7bcc97ef28d1b",
+    "pipeline_url": "https://gitlab.acme.internal/ai-platform/harnesses/document-segmentation/-/pipelines/40000",
+    "trigger": "schedule",
+    "environment": {
+      "model": "claude-haiku-4-5",
+      "model_build": "gw-2026.05.11-b38",
+      "runtime": "agent-sdk-python",
+      "temperature": 0,
+      "seed": 20260101
+    }
+  },
+  "suites": [
+    {
+      "id": "golden",
+      "kind": "golden",
+      "dataset": {
+        "id": "document-segmentation-golden",
+        "version": "v3",
+        "size": 120,
+        "checksum": "sha256:6f7debcd52bccf09f01931a7a4c4a32cba7ce42aadb61dc371741abb2bcec73e",
+        "provenance": "hand-labelled",
+        "classification": "internal"
+      },
+      "cases": {
+        "total": 120,
+        "passed": 107,
+        "failed": 13,
+        "skipped": 0,
+        "errored": 0
+      },
+      "metrics": {
+        "boundary_f1": {
+          "value": 0.8231,
+          "unit": "ratio",
+          "threshold": 0.85,
+          "direction": "higher-is-better",
+          "status": "fail"
+        },
+        "anchor_integrity": {
+          "value": 0.9201,
+          "unit": "ratio",
+          "threshold": 0.99,
+          "direction": "higher-is-better",
+          "status": "fail"
+        }
+      },
+      "failures": [
+        {
+          "case_id": "gol-1093",
+          "reason": "Numbered list inside a clause split into separate segments.",
+          "category": "boundary",
+          "artefact": "redacted"
+        },
+        {
+          "case_id": "gol-5460",
+          "reason": "Table spanning three pages emitted as one oversized segment.",
+          "category": "table",
+          "artefact": "redacted"
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "pass_rate": 0.8884,
+    "coverage": 0.688,
+    "hallucination_rate": 0.0292,
+    "grounding_rate": 0.966,
+    "p50_latency_ms": 6001,
+    "p95_latency_ms": 13639,
+    "cost_per_case": 0.041,
+    "gated_metrics_failed": 2
+  }
+}

@@ -1,0 +1,28 @@
+{{ define "main" }}
+<header class="page-head">
+  <h1>{{ .Title }}</h1>
+  {{ with .Content }}<div class="prose">{{ . }}</div>{{ end }}
+</header>
+{{ $pages := where .Pages "Type" "harnesses" }}
+{{ if $pages }}
+<p class="muted">{{ len $pages }} harness(es).</p>
+<ul class="hlist">
+  {{ range $pages.ByTitle }}
+    {{ $c := index $.Site.Data.cards .Params.id }}
+    {{ partial "harness-card.html" (dict "h" (dict
+        "id" .Params.id "name" .Title "summary" .Params.summary
+        "lifecycle" $c.status.lifecycle.effective "quality" $c.status.quality.score
+        "band" $c.status.quality.band "consumers" $c.status.consumer_count
+        "team" (index $c.spec.metadata "team")
+        "updated" (substr (string $c.status.last_updated) 0 10)
+        "pass_rate" (and $c.status.evaluation $c.status.evaluation.totals.pass_rate))) }}
+  {{ end }}
+</ul>
+{{ else }}
+<ul class="page-list">
+  {{ range .Pages.ByWeight }}
+  <li><a href="{{ .RelPermalink }}">{{ .Title }}</a>{{ with .Params.summary }} — <span class="muted">{{ . }}</span>{{ end }}</li>
+  {{ end }}
+</ul>
+{{ end }}
+{{ end }}

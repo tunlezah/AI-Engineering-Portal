@@ -1,0 +1,13 @@
+harness: code-review-assistant
+state: approved
+approved_at: "2026-03-11"
+approved_version: "1.4.0"
+approved_by: ["@m.reyes (governance board)", "@k.duarte (domain steward, engineering)"]
+last_reviewed: "2026-03-11"
+review_due: "2026-06-09"     # deliberately in the past: shows the overdue-review path
+waivers:
+  - metric: p95_latency_ms
+    reason: "Repo-context plugin regression upstream; fix tracked in DX-812."
+    approved_by: ["@m.reyes", "@k.duarte"]
+    granted: "2026-07-01"
+    expires: "2026-07-31"

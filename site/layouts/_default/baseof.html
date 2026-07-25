@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en-gb" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ if .IsHome }}{{ .Site.Title }}{{ else }}{{ .Title }} · {{ .Site.Title }}{{ end }}</title>
+<meta name="description" content="{{ with .Params.summary }}{{ . }}{{ else }}{{ .Site.Params.description }}{{ end }}">
+{{/* Theme is applied before first paint so a dark-mode user never sees a white flash. */}}
+<script>
+(function(){try{var t=localStorage.getItem('registry-theme');if(t){document.documentElement.dataset.theme=t;}}catch(e){}})();
+</script>
+<link rel="stylesheet" href="{{ "css/registry.css" | relURL }}">
+<link rel="icon" href="{{ "favicon.svg" | relURL }}" type="image/svg+xml">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="{{ "/" | relURL }}">
+      <span class="brand-mark" aria-hidden="true">◈</span>
+      <span class="brand-text">AI Harness Registry</span>
+    </a>
+    <nav class="main-nav" aria-label="Main">
+      <ul>
+        {{ range .Site.Menus.main }}
+        <li><a href="{{ .URL | relURL }}"{{ if $.IsMenuCurrent "main" . }} aria-current="page"{{ end }}>{{ .Name }}</a></li>
+        {{ end }}
+      </ul>
+    </nav>
+    <form class="header-search" action="{{ "browse/" | relURL }}" method="get" role="search">
+      <label class="visually-hidden" for="q">Search harnesses</label>
+      <input type="search" id="q" name="q" placeholder="Search harnesses…" autocomplete="off">
+    </form>
+    <button class="theme-toggle" type="button" aria-label="Switch colour theme" data-theme-toggle>
+      <span aria-hidden="true">◐</span>
+    </button>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+  {{ block "main" . }}{{ end }}
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <div>
+      <strong>AI Harness Registry</strong>
+      <p class="muted">Generated from GitLab. No database, no runtime service.
+      {{ with .Site.Data.registry }}Indexed {{ .generated_at }} · {{ .totals.harnesses }} harnesses{{ end }}</p>
+    </div>
+    <nav aria-label="Footer">
+      <ul>
+        <li><a href="{{ .Site.Params.registry_repo }}">Registry project</a></li>
+        <li><a href="{{ "docs/contributing/" | relURL }}">Publish a harness</a></li>
+        <li><a href="{{ "docs/search-ranking/" | relURL }}">How search ranks</a></li>
+        <li><a href="{{ "admin/" | relURL }}">Registry health</a></li>
+      </ul>
+    </nav>
+  </div>
+</footer>
+
+<script src="{{ "js/theme.js" | relURL }}" defer></script>
+{{ if or (eq .Type "harnesses") .Params.mermaid }}
+<script src="{{ "js/mermaid.min.js" | relURL }}" defer></script>
+<script src="{{ "js/mermaid-init.js" | relURL }}" defer></script>
+{{ end }}
+{{ if .Params.search_ui }}
+<script src="{{ "js/minisearch.min.js" | relURL }}" defer></script>
+<script src="{{ "js/registry.js" | relURL }}" defer></script>
+{{ end }}
+</body>
+</html>

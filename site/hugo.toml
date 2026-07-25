@@ -1,0 +1,92 @@
+baseURL = "/"
+languageCode = "en-gb"
+title = "AI Harness Registry"
+enableGitInfo = false
+enableRobotsTXT = true
+disableKinds = ["rss"]
+
+# The site is generated from snapshot data; content/ holds only authored prose
+# (blueprints, docs) plus the generated harness pages written by
+# `registryctl emit-content`.
+[params]
+  description = "The engineering layer: complete, evaluated AI implementations that skills are built on."
+  registry_repo = "https://gitlab.acme.internal/ai-platform/harness-registry"
+  support_channel = "#ai-platform"
+  # Everything is vendored; the build fails if a page references an external asset.
+  offline = true
+
+[taxonomies]
+  business = "business"
+  technical = "technical"
+  lifecycle = "lifecycles"
+  pattern = "patterns"
+  team = "teams"
+  owner = "owners"
+  model = "models"
+  plugin = "plugins"
+  tag = "tags"
+
+[permalinks]
+  # Keys are the taxonomy's plural (its URL section), not the singular.
+  [permalinks.term]
+    business = "/categories/business/:slug/"
+    technical = "/categories/technical/:slug/"
+    lifecycles = "/categories/lifecycle/:slug/"
+    patterns = "/reference-architectures/:slug/"
+    teams = "/teams/:slug/"
+    owners = "/owners/:slug/"
+    models = "/categories/model/:slug/"
+    plugins = "/categories/plugin/:slug/"
+    tags = "/tags/:slug/"
+
+[markup.goldmark.renderer]
+  unsafe = true          # generated diagrams and charts are ours, not user HTML
+
+[markup.tableOfContents]
+  startLevel = 2
+  endLevel = 3
+
+[markup.highlight]
+  noClasses = false
+  guessSyntax = true
+
+[pagination]
+  pagerSize = 60
+
+[outputs]
+  home = ["HTML"]
+  section = ["HTML"]
+  term = ["HTML"]
+
+[menus]
+  [[menus.main]]
+    name = "Browse"
+    url = "/browse/"
+    weight = 10
+  [[menus.main]]
+    name = "Categories"
+    url = "/categories/"
+    weight = 20
+  [[menus.main]]
+    name = "Reference Architectures"
+    url = "/reference-architectures/"
+    weight = 30
+  [[menus.main]]
+    name = "Evaluations"
+    url = "/evaluations/"
+    weight = 40
+  [[menus.main]]
+    name = "Teams"
+    url = "/teams/"
+    weight = 50
+  [[menus.main]]
+    name = "Docs"
+    url = "/docs/"
+    weight = 60
+  [[menus.main]]
+    name = "Admin"
+    url = "/admin/"
+    weight = 70
+
+[security.exec]
+  allow = []

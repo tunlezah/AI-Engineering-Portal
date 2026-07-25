@@ -1,0 +1,10 @@
+project_path: ai-platform/harnesses/shared/document-segmentation
+web_url: https://gitlab.acme.internal/ai-platform/harnesses/shared/document-segmentation
+commit: 3b90ac71f5e2d8460c1a97fe35b2d0847ca619ef
+last_activity_at: "2026-06-30T13:22:00Z"
+pipeline: {status: success}
+releases: [{tag_name: v4.1.2, released_at: "2026-06-30T13:22:00Z"}, {tag_name: v4.0.0, released_at: "2026-02-02T10:00:00Z"}]
+signed_tag: true
+sbom_published: true
+median_issue_response_days: 4.0
+open_issue_stats: {counts: {opened: 7}}

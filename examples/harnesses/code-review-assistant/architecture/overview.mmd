@@ -1,0 +1,9 @@
+flowchart LR
+    MR[Merge request] --> CTX[Repository context]
+    CTX --> AN[Analyse diff]
+    AN --> CL[Candidate findings]
+    CL --> RP{Reproduces in sandbox?}
+    RP -->|yes| F[Finding: defect]
+    RP -->|no| O[Observation]
+    F --> S[Summary]
+    O --> S

@@ -1,0 +1,85 @@
+apiVersion: harness.registry.acme.internal/v1
+kind: Harness
+metadata:
+  id: ticket-triage
+  name: Service Ticket Triage
+  summary: Classifies, routes and summarises inbound service tickets with confidence-gated automation.
+  description: >
+    Reads an inbound service desk ticket, classifies it against the service
+    catalogue, infers urgency and impact, drafts a summary for the assignee and
+    proposes a routing decision. Routing below a confidence threshold is handed
+    to a human rather than guessed.
+  owner: group:itsm-ai
+  maintainers: ["@d.fischer", "@l.nkemelu"]
+  team: itsm-ai
+  tags: [triage, routing, classification, service-desk]
+spec:
+  version: 3.2.0
+  lifecycle: org-ready
+  domains:
+    business: [it-service, customer-support]
+    technical: [agentic, classification, tool-calling, guardrails]
+  architecture:
+    pattern: tool-calling
+    deviations:
+      - "Routing decisions are executed by deterministic code, not by the model, so a wrong classification cannot move a ticket to an unauthorised queue."
+  models:
+    supported: [claude-sonnet-5, claude-haiku-4-5]
+    default: claude-haiku-4-5
+    unsupported:
+      - model: internal-classifier-v1
+        reason: "Deprecated platform model; category F1 0.68 against the 2026 service catalogue."
+  runtimes: [agent-sdk-python, orchestrator-service]
+  plugins:
+    required:
+      - {id: servicenow-connector, range: "^2.4.0", purpose: "Read the ticket, write the routing decision.", trust_tier: certified}
+      - {id: knowledge-search, range: "^5.2.0", purpose: "Retrieve similar past incidents and known-error articles.", trust_tier: core}
+    optional:
+      - {id: pii-redactor, range: "^2.0.0", purpose: "Redact customer identifiers in summaries shared externally.", trust_tier: core}
+  retrieval:
+    enabled: true
+    strategy: hybrid
+    index: knowledge-incidents-v4
+    chunking: "One chunk per known-error article section, max 600 tokens."
+    embedding_model: internal-embed-v3
+    top_k: 6
+  interfaces:
+    inputs:
+      - {name: ticket_id, type: string, description: "ServiceNow ticket number.", required: true}
+      - {name: channel, type: string, description: "Origin channel: portal, email, chat, phone.", required: false}
+    outputs:
+      - {name: category, type: string, description: "Service catalogue category and subcategory."}
+      - {name: routing, type: object, description: "Proposed queue, confidence and rationale."}
+      - {name: summary, type: string, format: markdown, description: "Assignee-facing summary with cited prior incidents."}
+      - {name: audit_record, type: object, description: "Model, prompt versions, retrieved articles, decisions."}
+    config_schema: config/schema.json
+  guardrails:
+    - {id: confidence-gate, type: refusal-policy, enforcement: blocking, implemented_by: workflows/steps/gate.py}
+    - {id: no-auto-close, type: human-in-the-loop, enforcement: blocking, implemented_by: workflows/triage.yaml#assign}
+    - {id: customer-data-redaction, type: pii-redaction, enforcement: blocking, implemented_by: "plugin:pii-redactor"}
+  policies: [POL-0014, POL-0027]
+  security:
+    classification: internal
+    risk_level: medium
+    data_types: [customer-pii, internal]
+    human_review: recommended
+    egress: [none]
+  operations:
+    estimated_cost: {unit: per-invocation, value: 0.018, currency: GBP, basis: "Median ticket, claude-haiku-4-5, 30-day production sample (41k tickets)."}
+    estimated_latency: {p50_ms: 3100, p95_ms: 7400, measured_on: "2026-07-08"}
+    concurrency: 32
+    support: business-hours
+  limitations:
+    - "Trained and evaluated on English tickets; other languages route to the general queue."
+    - "Cannot triage tickets whose only content is an attached screenshot."
+    - "Service catalogue changes require a re-evaluation; the harness does not learn new categories at runtime."
+    - "Urgency inference is advisory; SLA clocks are set by ServiceNow rules, not by this harness."
+  roadmap:
+    - {item: "Attachment OCR for screenshot-only tickets", target: "2026-Q4", issue: "#221"}
+    - {item: "Per-queue confidence thresholds", target: "3.3.0", issue: "#238"}
+  licensing: {license: ACME-Internal-1.0, third_party_review: false}
+  links:
+    repository: https://gitlab.acme.internal/ai-platform/harnesses/support/ticket-triage
+    documentation: docs/index.md
+    support_channel: "#ai-itsm"
+  example_skills: [skill://service-desk-assist, skill://incident-summariser]

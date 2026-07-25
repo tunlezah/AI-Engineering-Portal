@@ -1,0 +1,30 @@
+{{ define "main" }}
+{{ $r := .Site.Data.registry }}
+<header class="page-head">
+  <h1>{{ .Title }}</h1>
+  {{ with .Content }}<div class="prose">{{ . }}</div>{{ end }}
+</header>
+<table class="data">
+  <thead><tr><th>Team</th><th>Harnesses</th><th>Certified</th><th>Mean quality</th><th>Consumers</th></tr></thead>
+  <tbody>
+  {{ range $team, $count := $r.teams }}
+    {{ $cards := slice }}
+    {{ range $id, $c := $.Site.Data.cards }}
+      {{ if eq (index $c.spec.metadata "team") $team }}{{ $cards = $cards | append $c }}{{ end }}
+    {{ end }}
+    {{ $q := 0 }}{{ $cons := 0 }}{{ $cert := 0 }}
+    {{ range $cards }}
+      {{ $q = add $q .status.quality.score }}
+      {{ $cons = add $cons .status.consumer_count }}
+      {{ if eq .status.lifecycle.effective "certified" }}{{ $cert = add $cert 1 }}{{ end }}
+    {{ end }}
+    <tr>
+      <td><a href="{{ printf "teams/%s/" $team | relURL }}">{{ $team }}</a></td>
+      <td>{{ $count }}</td><td>{{ $cert }}</td>
+      <td>{{ if $count }}{{ div $q $count }}{{ else }}—{{ end }}</td>
+      <td>{{ $cons }}</td>
+    </tr>
+  {{ end }}
+  </tbody>
+</table>
+{{ end }}

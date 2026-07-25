@@ -1,0 +1,66 @@
+apiVersion: harness.registry.acme.internal/v1
+kind: Harness
+metadata:
+  id: sql-analyst
+  name: SQL Analyst
+  summary: Answers analytical questions over the warehouse by generating, validating and explaining read-only SQL.
+  owner: group:data-platform
+  maintainers: ["@n.iqbal"]
+  team: data-platform
+  tags: [sql, analytics, semantic-layer, text-to-sql]
+spec:
+  version: 0.9.2
+  lifecycle: team-ready
+  domains:
+    business: [data-analytics, finance]
+    technical: [sql-retrieval, tool-calling, analysis]
+  architecture:
+    pattern: sql-agent
+    deviations:
+      - "Queries are generated against the semantic layer rather than raw tables, so column semantics are defined once rather than re-inferred per question."
+  models:
+    supported: [claude-opus-5, claude-sonnet-5]
+    default: claude-opus-5
+  runtimes: [agent-sdk-python, notebook]
+  plugins:
+    required:
+      - {id: warehouse-sql, range: "^1.1.0", purpose: "Read-only execution with row-level security.", trust_tier: core}
+      - {id: semantic-layer, range: "^2.0.0", purpose: "Metric and dimension definitions.", trust_tier: certified}
+  retrieval:
+    enabled: true
+    strategy: sql
+    index: semantic-layer-v2
+    top_k: 12
+  interfaces:
+    inputs:
+      - {name: question, type: string, description: "Analytical question in natural language.", required: true}
+      - {name: workspace, type: string, description: "Warehouse workspace, determines row-level security context.", required: true}
+    outputs:
+      - {name: sql, type: string, description: "The executed query."}
+      - {name: result, type: object, description: "Result set with column metadata."}
+      - {name: explanation, type: string, format: markdown, description: "How the question was interpreted, including assumptions."}
+    config_schema: config/schema.json
+  guardrails:
+    - {id: read-only, type: input-filter, enforcement: blocking, implemented_by: workflows/query.yaml}
+    - {id: row-limit, type: output-filter, enforcement: blocking, implemented_by: config/default.yaml}
+    - {id: redact-pii-columns, type: pii-redaction, enforcement: blocking, implemented_by: workflows/query.yaml}
+  policies: [POL-0014, POL-0033]
+  security:
+    classification: confidential
+    risk_level: high
+    data_types: [financial, customer-pii, internal]
+    human_review: recommended
+    egress: [none]
+  operations:
+    estimated_cost: {unit: per-invocation, value: 0.09, currency: GBP, basis: "Median question, opus, 200-run pilot sample."}
+    estimated_latency: {p50_ms: 9800, p95_ms: 31000, measured_on: "2026-05-12"}
+    support: best-effort
+  limitations:
+    - "Only the finance and commercial marts are modelled in the semantic layer; other schemas are unavailable."
+    - "Multi-step analytical questions requiring intermediate results are not supported."
+    - "Execution accuracy on the pilot set is 0.78; results must be checked before they inform a decision."
+  licensing: {license: ACME-Internal-1.0, third_party_review: false}
+  links:
+    repository: https://gitlab.acme.internal/ai-platform/harnesses/data/sql-analyst
+    documentation: docs/index.md
+    support_channel: "#data-ai"

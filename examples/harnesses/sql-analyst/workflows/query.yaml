@@ -1,0 +1,34 @@
+apiVersion: harness.registry.acme.internal/v1
+kind: Workflow
+id: sql-analyst
+version: 0.9.2
+inputs: [question, workspace]
+steps:
+  - id: semantics
+    uses: plugin:semantic-layer@^1.0.0
+    with: {question: "{{ inputs.question }}"}
+  - id: generate
+    uses: model
+    with: {prompt: prompts/generate-sql.md, model: "{{ config.model }}", temperature: 0}
+  - id: validate
+    guardrail: read-only
+    uses: code
+    with: {script: workflows/steps/validate_sql.py, allow: [SELECT, WITH], deny: [INSERT, UPDATE, DELETE, MERGE, DROP, ALTER, CREATE, GRANT]}
+  - id: execute
+    uses: plugin:warehouse-sql@^1.1.0
+    with: {sql: "{{ steps.generate.sql }}", workspace: "{{ inputs.workspace }}", read_only: true}
+  - id: limit
+    guardrail: row-limit
+    uses: code
+    with: {script: workflows/steps/limit.py, max_rows: "{{ config.row_limit }}"}
+  - id: mask
+    guardrail: redact-pii-columns
+    uses: code
+    with: {script: workflows/steps/mask.py, classification: customer-pii}
+  - id: explain
+    uses: model
+    with: {prompt: prompts/explain.md, model: "{{ config.model }}"}
+outputs:
+  sql: "{{ steps.generate.sql }}"
+  result: "{{ steps.mask.rows }}"
+  explanation: "{{ steps.explain.text }}"

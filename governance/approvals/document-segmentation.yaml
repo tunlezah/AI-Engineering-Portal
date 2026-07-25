@@ -1,0 +1,7 @@
+harness: document-segmentation
+state: approved
+approved_at: "2026-04-20"
+approved_version: "4.1.2"
+approved_by: ["@a.okafor (platform)", "@m.reyes (governance board)"]
+last_reviewed: "2026-04-20"
+review_due: "2026-10-17"

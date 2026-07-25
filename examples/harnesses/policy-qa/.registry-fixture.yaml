@@ -1,0 +1,10 @@
+project_path: ai-platform/harnesses/people/policy-qa
+web_url: https://gitlab.acme.internal/ai-platform/harnesses/people/policy-qa
+commit: 2f7c8e1a94d0b356e7a1c8f2903bd45617ea8c09
+last_activity_at: "2026-06-01T10:00:00Z"
+pipeline: {status: success}
+releases: [{tag_name: v1.4.0, released_at: "2026-06-01T10:00:00Z"}]
+signed_tag: false
+sbom_published: false
+median_issue_response_days: 21.0
+open_issue_stats: {counts: {opened: 5}}

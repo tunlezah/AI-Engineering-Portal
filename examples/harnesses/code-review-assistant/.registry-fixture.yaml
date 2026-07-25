@@ -1,0 +1,11 @@
+project_path: ai-platform/harnesses/engineering/code-review-assistant
+web_url: https://gitlab.acme.internal/ai-platform/harnesses/engineering/code-review-assistant
+commit: 91ba3d7fe0c48a52196d3bc7e4f08a1523cd67ba
+last_activity_at: "2026-07-05T15:30:00Z"
+visibility: internal
+pipeline: {status: success}
+releases: [{tag_name: v1.6.1, released_at: "2026-07-05T15:30:00Z"}, {tag_name: v1.4.0, released_at: "2026-03-11T09:00:00Z"}]
+signed_tag: false          # certification requires a signed release; this one is not signed
+sbom_published: true
+median_issue_response_days: 6.0
+open_issue_stats: {counts: {opened: 11}}

@@ -1,0 +1,10 @@
+project_path: ai-platform/harnesses/shared/citation-grounding
+web_url: https://gitlab.acme.internal/ai-platform/harnesses/shared/citation-grounding
+commit: cd41f0a836b95e27d1408fa62b7c95031ed7ab48
+last_activity_at: "2026-07-16T08:40:00Z"
+pipeline: {status: success}
+releases: [{tag_name: v2.2.4, released_at: "2026-07-16T08:40:00Z"}, {tag_name: v2.2.0, released_at: "2026-04-09T12:00:00Z"}]
+signed_tag: true
+sbom_published: true
+median_issue_response_days: 1.0
+open_issue_stats: {counts: {opened: 2}}

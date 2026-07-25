@@ -1,0 +1,112 @@
+{
+  "apiVersion": "harness.registry.acme.internal/v1",
+  "kind": "EvaluationReport",
+  "harness": "contract-review",
+  "version": "2.3.0",
+  "run": {
+    "id": "2026-07-03T0300Z-10296",
+    "started_at": "2026-07-03T03:00:00Z",
+    "duration_s": 1795.3,
+    "commit": "c379b7aae7985a32343ee6252fd08225e9f3f2ba",
+    "pipeline_url": "https://gitlab.acme.internal/ai-platform/harnesses/contract-review/-/pipelines/40008",
+    "trigger": "schedule",
+    "environment": {
+      "model": "claude-sonnet-5",
+      "model_build": "gw-2026.05.11-b38",
+      "runtime": "agent-sdk-python",
+      "temperature": 0,
+      "seed": 20260109
+    }
+  },
+  "suites": [
+    {
+      "id": "golden",
+      "kind": "golden",
+      "dataset": {
+        "id": "contract-review-golden",
+        "version": "v3",
+        "size": 180,
+        "checksum": "sha256:73431da67b0f49fc8ec3966c6d8904ee3c9b6196d011265503e2f11868c367ec",
+        "provenance": "hand-labelled",
+        "classification": "internal"
+      },
+      "cases": {
+        "total": 180,
+        "passed": 171,
+        "failed": 9,
+        "skipped": 0,
+        "errored": 0
+      },
+      "metrics": {
+        "clause_f1": {
+          "value": 0.9032,
+          "unit": "ratio",
+          "threshold": 0.85,
+          "direction": "higher-is-better",
+          "status": "pass"
+        },
+        "severity_agreement": {
+          "value": 0.8363,
+          "unit": "ratio",
+          "threshold": 0.8,
+          "direction": "higher-is-better",
+          "status": "pass"
+        },
+        "citation_grounding": {
+          "value": 0.9936,
+          "unit": "ratio",
+          "threshold": 0.99,
+          "direction": "higher-is-better",
+          "status": "pass"
+        },
+        "hallucinated_citations": {
+          "value": 0.0091,
+          "unit": "ratio",
+          "threshold": 0.01,
+          "direction": "higher-is-better",
+          "status": "fail"
+        }
+      },
+      "failures": []
+    },
+    {
+      "id": "adversarial",
+      "kind": "adversarial",
+      "dataset": {
+        "id": "contract-review-adversarial",
+        "version": "v3",
+        "size": 64,
+        "checksum": "sha256:b4a92a6e6bf7469557970c4036159fa907e07b0f7b276afce5481b2927fd0241",
+        "provenance": "synthetic",
+        "classification": "internal"
+      },
+      "cases": {
+        "total": 64,
+        "passed": 63,
+        "failed": 1,
+        "skipped": 0,
+        "errored": 0
+      },
+      "metrics": {
+        "injection_resistance": {
+          "value": 0.9626,
+          "unit": "ratio",
+          "threshold": 0.95,
+          "direction": "higher-is-better",
+          "status": "pass"
+        }
+      },
+      "failures": []
+    }
+  ],
+  "totals": {
+    "pass_rate": 0.9486,
+    "coverage": 0.84,
+    "hallucination_rate": 0.0127,
+    "grounding_rate": 0.982,
+    "p50_latency_ms": 76628,
+    "p95_latency_ms": 174155,
+    "cost_per_case": 0.4215,
+    "gated_metrics_failed": 1
+  }
+}

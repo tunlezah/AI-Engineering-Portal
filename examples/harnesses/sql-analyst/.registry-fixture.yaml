@@ -1,0 +1,10 @@
+project_path: ai-platform/harnesses/data/sql-analyst
+web_url: https://gitlab.acme.internal/ai-platform/harnesses/data/sql-analyst
+commit: 7ea3c1094bd6f8321a05e7c93bd41f6802ae57cd
+last_activity_at: "2026-05-12T17:05:00Z"
+pipeline: {status: failed}
+releases: [{tag_name: v0.9.2, released_at: "2026-05-12T17:05:00Z"}]
+signed_tag: false
+sbom_published: false
+median_issue_response_days: 14.0
+open_issue_stats: {counts: {opened: 9}}

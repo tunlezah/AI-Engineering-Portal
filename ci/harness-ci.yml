@@ -52,10 +52,14 @@ stages: [validate, test, evaluate, package, publish]
 harness:validate:
   stage: validate
   script:
-    - harnessctl validate .                     # JSON Schema + cross-file consistency
-    - harnessctl lint-metadata .                # taxonomy, models, runtimes, plugin refs, owner group
-    - harnessctl check-structure .              # required directories and files
-    - harnessctl check-links . --offline        # internal + repo-relative links only
+    # The SAME validator the registry indexer runs, from the same package. One
+    # implementation, one enforcement point: a harness that validates locally
+    # cannot be rejected by the indexer for a different reason.
+    #   - JSON Schema (shape)
+    #   - references (taxonomy, models, runtimes, plugins, owner group)
+    #   - policy rules (PII redaction, egress, endpoints in manifests)
+    #   - repository consistency (guardrail wiring, CODEOWNERS, config schema, links)
+    - registryctl validate . --strict
     - harnessctl check-versions .               # harness.yaml version == tag (on tags), CHANGELOG entry exists
   artifacts:
     when: always
@@ -81,13 +85,10 @@ harness:secrets:
   script: [gitleaks detect --source . --redact --report-path reports/gitleaks.json]
   artifacts: { when: always, paths: [reports/gitleaks.json], expire_in: 90 days }
 
-harness:policy:
-  stage: validate
-  script:
-    # Guardrail/policy assertions that are structural, not behavioural:
-    # e.g. a harness handling customer-pii must declare a pii-redaction guardrail.
-    - harnessctl policy-check . --policies policies.yaml
-  allow_failure: false
+# Structural policy assertions (a harness handling customer-pii must declare a
+# pii-redaction guardrail; egress must be internal; manifests must not contain
+# endpoints) are part of `registryctl validate` above — one implementation,
+# checked identically here and in the indexer.
 
 # --------------------------------------------------------------------------
 # test — deterministic, no model calls. Must stay under 5 minutes.

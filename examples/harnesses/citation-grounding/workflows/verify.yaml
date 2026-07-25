@@ -1,0 +1,24 @@
+apiVersion: harness.registry.acme.internal/v1
+kind: Workflow
+id: citation-grounding
+version: 2.2.4
+inputs: [claims, sources]
+steps:
+  - id: normalise
+    uses: code
+    with: {script: workflows/steps/normalise.py}   # quotation marks, whitespace, footnote markers
+  - id: span-match
+    guardrail: exact-quote-match
+    uses: code
+    with: {script: workflows/steps/span_match.py}
+  - id: citation-check
+    guardrail: citation-in-source-set
+    uses: code
+    with: {script: workflows/steps/citations.py}
+  - id: judge
+    uses: model
+    when: "{{ config.mode == 'semantic' }}"
+    with: {prompt: prompts/verify.md, model: "{{ config.model }}", temperature: 0}
+outputs:
+  verdicts: "{{ steps.citation-check.verdicts }}"
+  grounding_rate: "{{ steps.citation-check.rate }}"

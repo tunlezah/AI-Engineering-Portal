@@ -1,0 +1,10 @@
+harness: ticket-triage
+state: approved
+approved_at: "2026-06-02"
+approved_version: "3.2.0"
+approved_by:
+  - "@m.reyes (governance board)"
+  - "@d.fischer (domain steward, it-service)"
+last_reviewed: "2026-06-02"
+review_due: "2026-08-31"
+notes: "Org-ready. Auto-close of P4 tickets remains disabled pending an incident review."

@@ -1,0 +1,54 @@
+apiVersion: harness.registry.acme.internal/v1
+kind: Harness
+metadata:
+  id: citation-grounding
+  name: Citation Grounding
+  summary: Verifies that every claim in a generated output is supported by quoted, retrievable evidence.
+  owner: group:ai-platform
+  maintainers: ["@h.varga", "@a.okafor"]
+  team: ai-platform
+  tags: [grounding, citations, verification, building-block]
+spec:
+  version: 2.2.4
+  lifecycle: org-ready
+  domains:
+    business: [cross-functional]
+    technical: [guardrails, evaluation, extraction]
+  architecture: {pattern: evaluation-harness}
+  models:
+    supported: [claude-sonnet-5, claude-opus-5]
+    default: claude-sonnet-5
+  runtimes: [agent-sdk-python, agent-sdk-typescript, cli]
+  plugins:
+    optional:
+      - {id: citation-formatter, range: "^1.2.0", purpose: "Render verified citations in house style.", trust_tier: certified}
+  interfaces:
+    inputs:
+      - {name: claims, type: array, description: "Generated statements, each with its asserted evidence and citation ids.", required: true}
+      - {name: sources, type: array, description: "The retrieved source set the generation was allowed to use.", required: true}
+    outputs:
+      - {name: verdicts, type: array, description: "Per claim: grounded | unsupported | partially-supported, with the failing span."}
+      - {name: grounding_rate, type: number, description: "Share of claims fully supported."}
+    config_schema: config/schema.json
+  guardrails:
+    - {id: exact-quote-match, type: grounding-check, enforcement: blocking, implemented_by: workflows/verify.yaml}
+    - {id: citation-in-source-set, type: grounding-check, enforcement: blocking, implemented_by: workflows/verify.yaml}
+  security:
+    classification: internal
+    risk_level: low
+    data_types: [internal]
+    human_review: not-required
+    egress: [none]
+  operations:
+    estimated_cost: {unit: per-invocation, value: 0.006, currency: GBP, basis: "10-claim output, sonnet, 1k-run sample."}
+    estimated_latency: {p50_ms: 900, p95_ms: 2600, measured_on: "2026-07-02"}
+    support: business-hours
+  limitations:
+    - "Exact-match verification only; a correct paraphrase is reported as unsupported by design."
+    - "Cannot verify claims about the absence of information in the source set."
+    - "Numeric claims derived by arithmetic over sources are out of scope."
+  licensing: {license: ACME-Internal-1.0, third_party_review: false}
+  links:
+    repository: https://gitlab.acme.internal/ai-platform/harnesses/shared/citation-grounding
+    documentation: docs/index.md
+    support_channel: "#ai-platform"

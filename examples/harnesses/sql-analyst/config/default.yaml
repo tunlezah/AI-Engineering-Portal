@@ -1,0 +1,3 @@
+model: claude-opus-5
+row_limit: 5000
+explain_only: false

@@ -1,0 +1,82 @@
+{
+  "apiVersion": "harness.registry.acme.internal/v1",
+  "kind": "EvaluationReport",
+  "harness": "document-segmentation",
+  "version": "4.1.2",
+  "run": {
+    "id": "2026-05-15T0300Z-10111",
+    "started_at": "2026-05-15T03:00:00Z",
+    "duration_s": 2161.3,
+    "commit": "3a66bd8dfbdfed2f41085ffb13288b3c09ad7ef8",
+    "pipeline_url": "https://gitlab.acme.internal/ai-platform/harnesses/document-segmentation/-/pipelines/40003",
+    "trigger": "schedule",
+    "environment": {
+      "model": "claude-haiku-4-5",
+      "model_build": "gw-2026.05.11-b38",
+      "runtime": "agent-sdk-python",
+      "temperature": 0,
+      "seed": 20260104
+    }
+  },
+  "suites": [
+    {
+      "id": "golden",
+      "kind": "golden",
+      "dataset": {
+        "id": "document-segmentation-golden",
+        "version": "v3",
+        "size": 120,
+        "checksum": "sha256:6f7debcd52bccf09f01931a7a4c4a32cba7ce42aadb61dc371741abb2bcec73e",
+        "provenance": "hand-labelled",
+        "classification": "internal"
+      },
+      "cases": {
+        "total": 120,
+        "passed": 108,
+        "failed": 12,
+        "skipped": 0,
+        "errored": 0
+      },
+      "metrics": {
+        "boundary_f1": {
+          "value": 0.8533,
+          "unit": "ratio",
+          "threshold": 0.85,
+          "direction": "higher-is-better",
+          "status": "pass"
+        },
+        "anchor_integrity": {
+          "value": 0.946,
+          "unit": "ratio",
+          "threshold": 0.99,
+          "direction": "higher-is-better",
+          "status": "fail"
+        }
+      },
+      "failures": [
+        {
+          "case_id": "gol-3742",
+          "reason": "Numbered list inside a clause split into separate segments.",
+          "category": "boundary",
+          "artefact": "redacted"
+        },
+        {
+          "case_id": "gol-3701",
+          "reason": "Table spanning three pages emitted as one oversized segment.",
+          "category": "table",
+          "artefact": "redacted"
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "pass_rate": 0.8984,
+    "coverage": 0.7,
+    "hallucination_rate": 0.0191,
+    "grounding_rate": 0.972,
+    "p50_latency_ms": 5611,
+    "p95_latency_ms": 12752,
+    "cost_per_case": 0.0383,
+    "gated_metrics_failed": 1
+  }
+}

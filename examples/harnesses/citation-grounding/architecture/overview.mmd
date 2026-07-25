@@ -1,0 +1,9 @@
+flowchart LR
+    C[Claims + citations] --> E[Exact span match]
+    S[(Source set)] --> E
+    E -->|matched| V[Verdict: grounded]
+    E -->|no match| M{semantic mode?}
+    M -->|yes| J[Model judge]
+    M -->|no| U[Verdict: unsupported]
+    J --> V
+    J --> U

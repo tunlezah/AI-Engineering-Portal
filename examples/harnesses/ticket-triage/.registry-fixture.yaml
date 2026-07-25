@@ -1,0 +1,15 @@
+# Stands in for GitLab API facts during local builds. Real projects have no such file.
+project_path: ai-platform/harnesses/support/ticket-triage
+web_url: https://gitlab.acme.internal/ai-platform/harnesses/support/ticket-triage
+commit: 4c8e1f90b25a7d3e6014fa89bc23d5710ee94af3
+last_activity_at: "2026-07-21T09:14:00Z"
+visibility: internal
+pipeline: {status: success, web_url: "https://gitlab.acme.internal/ai-platform/harnesses/support/ticket-triage/-/pipelines/44120"}
+releases:
+  - {tag_name: v3.2.0, released_at: "2026-07-21T09:14:00Z"}
+  - {tag_name: v3.1.0, released_at: "2026-05-30T11:02:00Z"}
+  - {tag_name: v3.0.0, released_at: "2026-03-14T16:41:00Z"}
+signed_tag: true
+sbom_published: true
+median_issue_response_days: 2.0
+open_issue_stats: {counts: {opened: 4}}

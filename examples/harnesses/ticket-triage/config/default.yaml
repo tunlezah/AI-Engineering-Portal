@@ -1,0 +1,4 @@
+model: claude-haiku-4-5
+confidence_threshold: 0.72
+retrieval: {top_k: 6}
+auto_assign: false
