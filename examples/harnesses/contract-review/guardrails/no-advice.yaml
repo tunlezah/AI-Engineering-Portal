@@ -1,0 +1,56 @@
+# Output filter: the harness describes divergence from the playbook; it does not
+# advise. Enforcement is blocking — a matching finding is rewritten by a
+# constrained repair pass, and if repair fails the finding is dropped and counted.
+#
+# Rules are deliberately conservative and precision-tuned: a false block costs a
+# finding, a false allow puts unauthorised legal advice in front of a client.
+
+version: 3
+enforcement: blocking
+scope: [findings.divergence, findings.suggested_wording, summary]
+
+blocklist_phrases:
+  - "you should"
+  - "we advise"
+  - "we recommend that you"
+  - "in our legal opinion"
+  - "this is unenforceable"
+  - "will not hold up in court"
+  - "you are entitled to"
+  - "there is no risk"
+  - "guaranteed"
+
+blocklist_patterns:
+  - id: outcome-prediction
+    regex: "(?i)\\b(a )?court (would|will|is likely to)\\b"
+    reason: "Predicts litigation outcome."
+  - id: enforceability-assertion
+    regex: "(?i)\\b(is|are) (not )?(legally )?(binding|enforceable|valid)\\b"
+    reason: "Asserts a legal conclusion rather than describing divergence."
+  - id: negotiation-strategy
+    regex: "(?i)\\b(push back|hold firm|walk away|concede|trade (this )?(off|away))\\b"
+    reason: "Commercial negotiation strategy is out of scope."
+  - id: absolute-safety
+    regex: "(?i)\\b(no|zero) (legal )?(risk|exposure|liability)\\b"
+    reason: "Absolute safety claims are never appropriate."
+
+allowlist_patterns:
+  # Process language that superficially resembles advice but is required output.
+  - id: escalation
+    regex: "(?i)escalat(e|ion) to the responsible lawyer"
+  - id: review-required
+    regex: "(?i)refer(red)? (for|to) (a )?(position decision|human review)"
+  - id: playbook-reference
+    regex: "(?i)the playbook position (is|requires|prefers)"
+
+repair:
+  enabled: true
+  max_attempts: 1
+  prompt: prompts/repair-advice-language.md
+  # The repair pass may only rephrase; a repair that changes severity,
+  # evidence or citations is rejected and the finding is dropped.
+  invariants: [severity, evidence, citations, position_id]
+
+telemetry:
+  emit_metric: guardrail.no_advice.blocked
+  sample_blocked_outputs: 20      # retained 30 days for tuning, access-controlled

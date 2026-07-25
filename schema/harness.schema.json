@@ -1,0 +1,371 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-platform.acme.internal/schema/harness/v1.json",
+  "title": "AI Harness Manifest",
+  "description": "Declared specification for a single AI harness. This file contains ONLY facts a human author can legitimately assert. Derived facts (evaluation score, quality score, consumers, last commit) are computed by the registry indexer and MUST NOT appear here.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "enum": ["harness.registry.acme.internal/v1"],
+      "description": "Manifest schema version. Bumped only for breaking schema changes; v1 and v2 manifests may coexist in the registry."
+    },
+    "kind": { "type": "string", "enum": ["Harness"] },
+
+    "metadata": {
+      "type": "object",
+      "required": ["id", "name", "summary", "owner", "team"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]([a-z0-9-]{1,48}[a-z0-9])$",
+          "description": "Globally unique, immutable, URL-safe identifier. Never reused, even after retirement.",
+          "examples": ["contract-review"]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 64,
+          "examples": ["Contract Review Harness"]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 20,
+          "maxLength": 200,
+          "description": "One-sentence value proposition. Rendered on cards and in search results.",
+          "examples": ["Clause-level risk review of commercial contracts with citation-backed findings."]
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Optional long-form abstract. Prefer README.md for anything longer."
+        },
+        "owner": {
+          "$ref": "#/$defs/owner",
+          "description": "Accountable group. Must be a GitLab group path that exists and has >= 2 members."
+        },
+        "maintainers": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": { "$ref": "#/$defs/user" },
+          "description": "Individuals who merge changes. Must match CODEOWNERS."
+        },
+        "team": {
+          "type": "string",
+          "pattern": "^[a-z0-9-]+$",
+          "description": "Canonical team slug from teams.yaml in the registry project."
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,30}$" },
+          "description": "Free-form folksonomy. Not validated against the taxonomy; promoted to a category only by governance MR."
+        }
+      }
+    },
+
+    "spec": {
+      "type": "object",
+      "required": [
+        "version", "lifecycle", "domains", "architecture", "models",
+        "runtimes", "interfaces", "security", "licensing", "links"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z.-]+)?$",
+          "description": "SemVer of the harness contract. MUST equal the Git tag being released (without the 'v' prefix).",
+          "examples": ["2.3.1"]
+        },
+        "lifecycle": {
+          "type": "string",
+          "enum": ["experimental", "prototype", "team-ready", "org-ready", "certified", "deprecated", "retired"],
+          "description": "Declared maturity. The registry downgrades this if the objective gates for the declared level are not met; it never upgrades it. 'certified' may only be declared if a matching entry exists in the registry's certifications/ directory."
+        },
+        "domains": {
+          "type": "object",
+          "required": ["business", "technical"],
+          "additionalProperties": false,
+          "properties": {
+            "business": {
+              "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true,
+              "items": { "$ref": "#/$defs/taxonomyRef" },
+              "description": "Validated against taxonomy.yaml -> business."
+            },
+            "technical": {
+              "type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true,
+              "items": { "$ref": "#/$defs/taxonomyRef" },
+              "description": "Validated against taxonomy.yaml -> technical."
+            }
+          }
+        },
+        "architecture": {
+          "type": "object",
+          "required": ["pattern"],
+          "additionalProperties": false,
+          "properties": {
+            "pattern": {
+              "type": "string",
+              "description": "Reference architecture id this harness implements or specialises.",
+              "examples": ["document-review"]
+            },
+            "deviations": {
+              "type": "array",
+              "items": { "type": "string", "maxLength": 300 },
+              "description": "Where and why this harness departs from the blueprint."
+            }
+          }
+        },
+        "models": {
+          "type": "object",
+          "required": ["supported"],
+          "additionalProperties": false,
+          "properties": {
+            "supported": {
+              "type": "array", "minItems": 1, "uniqueItems": true,
+              "items": { "$ref": "#/$defs/modelRef" }
+            },
+            "default": { "$ref": "#/$defs/modelRef" },
+            "unsupported": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["model", "reason"],
+                "additionalProperties": false,
+                "properties": {
+                  "model": { "$ref": "#/$defs/modelRef" },
+                  "reason": { "type": "string", "maxLength": 300 }
+                }
+              },
+              "description": "Explicit negative results. As valuable as the positive list; prevents repeated failed experiments."
+            }
+          }
+        },
+        "runtimes": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "enum": ["agent-sdk-python", "agent-sdk-typescript", "orchestrator-service", "notebook", "cli", "gitlab-ci"]
+          },
+          "description": "Execution environments the harness is proven to run in. Validated against runtimes.yaml."
+        },
+        "plugins": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "required": { "type": "array", "items": { "$ref": "#/$defs/pluginRef" }, "uniqueItems": true },
+            "optional": { "type": "array", "items": { "$ref": "#/$defs/pluginRef" }, "uniqueItems": true }
+          }
+        },
+        "retrieval": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "strategy": { "type": "string", "enum": ["none", "vector", "keyword", "hybrid", "graph", "sql"] },
+            "index": { "type": "string", "description": "Logical index name; never a connection string." },
+            "chunking": { "type": "string", "maxLength": 200 },
+            "embedding_model": { "$ref": "#/$defs/modelRef" },
+            "top_k": { "type": "integer", "minimum": 1, "maximum": 200 },
+            "reranker": { "$ref": "#/$defs/modelRef" }
+          }
+        },
+        "dependencies": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "required": ["harness", "range"],
+            "additionalProperties": false,
+            "properties": {
+              "harness": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+              "range": { "type": "string", "description": "SemVer range.", "examples": ["^2.1.0"] },
+              "kind": { "type": "string", "enum": ["extends", "composes", "calls"], "default": "composes" }
+            }
+          },
+          "description": "Harness-to-harness edges. Cycles are a pipeline failure."
+        },
+        "interfaces": {
+          "type": "object",
+          "required": ["inputs", "outputs"],
+          "additionalProperties": false,
+          "description": "The contract that SemVer governs. Changing these incompatibly is a MAJOR bump.",
+          "properties": {
+            "inputs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/ioField" } },
+            "outputs": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/ioField" } },
+            "config_schema": { "type": "string", "description": "Repo-relative path to the JSON Schema for runtime configuration.", "examples": ["config/schema.json"] }
+          }
+        },
+        "guardrails": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "type", "enforcement"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+              "type": { "type": "string", "enum": ["input-filter", "output-filter", "pii-redaction", "grounding-check", "refusal-policy", "human-in-the-loop", "rate-limit", "cost-ceiling"] },
+              "enforcement": { "type": "string", "enum": ["blocking", "advisory", "logging-only"] },
+              "implemented_by": { "type": "string", "description": "Repo-relative path or plugin ref." }
+            }
+          }
+        },
+        "policies": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^POL-[0-9]{4}$" },
+          "description": "Corporate policy ids this harness is assessed against (see policies.yaml).",
+          "examples": [["POL-0014", "POL-0031"]]
+        },
+        "security": {
+          "type": "object",
+          "required": ["classification", "data_types", "human_review"],
+          "additionalProperties": false,
+          "properties": {
+            "classification": { "type": "string", "enum": ["public", "internal", "confidential", "restricted"] },
+            "risk_level": { "type": "string", "enum": ["low", "medium", "high", "critical"], "description": "Declared inherent risk before controls; the governance board may raise but not lower it." },
+            "data_types": {
+              "type": "array", "minItems": 1, "uniqueItems": true,
+              "items": { "type": "string", "enum": ["none", "public", "internal", "customer-pii", "employee-pii", "financial", "health", "legal-privileged", "source-code", "credentials"] }
+            },
+            "human_review": { "type": "string", "enum": ["not-required", "recommended", "required", "required-dual"] },
+            "egress": { "type": "array", "items": { "type": "string" }, "description": "Logical outbound destinations. Must be internal hostnames or the string 'none'." }
+          }
+        },
+        "operations": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "estimated_cost": {
+              "type": "object",
+              "required": ["unit", "value", "currency", "basis"],
+              "additionalProperties": false,
+              "properties": {
+                "unit": { "type": "string", "enum": ["per-invocation", "per-1k-tokens", "per-document", "per-conversation"] },
+                "value": { "type": "number", "minimum": 0 },
+                "currency": { "type": "string", "enum": ["GBP", "USD", "EUR", "tokens"] },
+                "basis": { "type": "string", "maxLength": 200, "description": "How the figure was derived. Required so readers can judge it." }
+              }
+            },
+            "estimated_latency": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "p50_ms": { "type": "integer", "minimum": 0 },
+                "p95_ms": { "type": "integer", "minimum": 0 },
+                "measured_on": { "type": "string", "format": "date" }
+              }
+            },
+            "concurrency": { "type": "integer", "minimum": 1 },
+            "support": { "type": "string", "enum": ["none", "best-effort", "business-hours", "24x7"] }
+          }
+        },
+        "limitations": {
+          "type": "array", "minItems": 1, "maxItems": 20,
+          "items": { "type": "string", "minLength": 10, "maxLength": 300 },
+          "description": "Mandatory. A harness with no stated limitations has not been evaluated honestly."
+        },
+        "roadmap": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["item"],
+            "additionalProperties": false,
+            "properties": {
+              "item": { "type": "string", "maxLength": 200 },
+              "target": { "type": "string", "description": "Quarter or SemVer.", "examples": ["2026-Q4", "3.0.0"] },
+              "issue": { "type": "string", "description": "GitLab issue reference.", "examples": ["#412"] }
+            }
+          }
+        },
+        "deprecation": {
+          "type": "object",
+          "required": ["since", "replaced_by", "removal_after"],
+          "additionalProperties": false,
+          "description": "Required when lifecycle is 'deprecated' or 'retired'; forbidden otherwise.",
+          "properties": {
+            "since": { "type": "string", "format": "date" },
+            "replaced_by": { "type": "string", "description": "Harness id, or 'none' with a justification in migration_guide." },
+            "removal_after": { "type": "string", "format": "date" },
+            "migration_guide": { "type": "string", "description": "Repo-relative path.", "examples": ["docs/migration-2-to-3.md"] }
+          }
+        },
+        "licensing": {
+          "type": "object",
+          "required": ["license", "third_party_review"],
+          "additionalProperties": false,
+          "properties": {
+            "license": { "type": "string", "description": "SPDX id or 'ACME-Internal-1.0'." },
+            "third_party_review": { "type": "boolean", "description": "True if legal has reviewed bundled third-party content (datasets, prompts derived from external sources)." },
+            "attribution": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "links": {
+          "type": "object",
+          "required": ["repository", "documentation"],
+          "additionalProperties": false,
+          "properties": {
+            "repository": { "type": "string", "format": "uri", "pattern": "^https://gitlab\\.acme\\.internal/" },
+            "documentation": { "type": "string", "description": "Repo-relative path or internal URL." },
+            "issues": { "type": "string" },
+            "support_channel": { "type": "string", "examples": ["#ai-legal-platform"] },
+            "demo": { "type": "string" }
+          }
+        },
+        "example_skills": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^skill://[a-z0-9-]+$" },
+          "description": "Advisory only. The authoritative consumer list is computed by the indexer from Skill Marketplace manifests."
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "owner": {
+      "type": "string",
+      "pattern": "^group:[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*)*$",
+      "examples": ["group:legal-ai-platform"]
+    },
+    "user": {
+      "type": "string",
+      "pattern": "^@[a-z0-9][a-z0-9._-]*$",
+      "examples": ["@a.okafor"]
+    },
+    "taxonomyRef": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{1,40}$" },
+    "modelRef": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._:-]*$",
+      "description": "Model id from models.yaml (the internal model catalogue), never a vendor URL.",
+      "examples": ["claude-opus-5", "internal-embed-v3"]
+    },
+    "pluginRef": {
+      "type": "object",
+      "required": ["id", "range"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$", "description": "Plugin Marketplace id." },
+        "range": { "type": "string", "examples": ["^1.4.0"] },
+        "purpose": { "type": "string", "maxLength": 200 },
+        "trust_tier": { "type": "string", "enum": ["core", "certified", "community", "experimental"], "description": "Advisory; reconciled against the Plugin Marketplace index at build time." }
+      }
+    },
+    "ioField": {
+      "type": "object",
+      "required": ["name", "type", "description"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "pattern": "^[a-z0-9_]+$" },
+        "type": { "type": "string", "enum": ["string", "number", "boolean", "object", "array", "file", "stream"] },
+        "description": { "type": "string", "maxLength": 300 },
+        "required": { "type": "boolean", "default": true },
+        "format": { "type": "string", "examples": ["pdf", "json", "markdown"] }
+      }
+    }
+  }
+}

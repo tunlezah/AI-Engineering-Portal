@@ -1,0 +1,218 @@
+# ==========================================================================
+# Shared CI template for EVERY harness repository.
+#
+# Usage in a harness project's .gitlab-ci.yml:
+#
+#   include:
+#     - project: ai-platform/harness-registry
+#       ref: v1                      # moving tag, bumped by the platform team
+#       file: /ci/harness-ci.yml
+#
+#   # Harness-specific jobs go below; the template's jobs are already wired.
+#
+# Design notes:
+#  * Every image is pulled from the internal registry. No internet access.
+#  * The template produces exactly one contract with the registry:
+#      artefact `harness-card.partial.json` on the default branch and on tags.
+#  * Producers cannot skip validation: the registry indexer refuses to publish a
+#    harness whose latest default-branch pipeline did not run `harness:validate`.
+# ==========================================================================
+
+spec:
+  inputs:
+    eval_schedule_only:
+      description: "Run the (expensive) full evaluation suite only on schedules and tags."
+      type: boolean
+      default: true
+    smoke_timeout:
+      description: "Quick-start smoke test timeout."
+      type: string
+      default: "10m"
+---
+
+variables:
+  REGISTRY_IMAGE: registry.acme.internal/ai-platform/harness-toolkit:1.8.2
+  MERMAID_IMAGE: registry.acme.internal/ai-platform/mermaid-cli:10.9.1
+  GITLEAKS_IMAGE: registry.acme.internal/security/gitleaks:8.18.4
+  SYFT_IMAGE: registry.acme.internal/security/syft:1.4.1
+  GIT_DEPTH: 0          # gitleaks needs full history
+
+default:
+  image: $REGISTRY_IMAGE
+  interruptible: true
+  retry:
+    max: 2
+    when: [runner_system_failure, stuck_or_timeout_failure]
+
+stages: [validate, test, evaluate, package, publish]
+
+# --------------------------------------------------------------------------
+# validate — cheap, fast, blocking. Runs on every MR and every push.
+# --------------------------------------------------------------------------
+harness:validate:
+  stage: validate
+  script:
+    - harnessctl validate .                     # JSON Schema + cross-file consistency
+    - harnessctl lint-metadata .                # taxonomy, models, runtimes, plugin refs, owner group
+    - harnessctl check-structure .              # required directories and files
+    - harnessctl check-links . --offline        # internal + repo-relative links only
+    - harnessctl check-versions .               # harness.yaml version == tag (on tags), CHANGELOG entry exists
+  artifacts:
+    when: always
+    reports:
+      codequality: reports/metadata-lint.json
+    paths: [reports/]
+    expire_in: 30 days
+
+harness:diagrams:
+  stage: validate
+  image: $MERMAID_IMAGE
+  script:
+    # Fails on syntax errors AND on diagrams that reference undeclared plugins.
+    - harnessctl extract-mermaid . --out .mermaid/
+    - for f in .mermaid/*.mmd; do mmdc -i "$f" -o "/tmp/$(basename "$f").svg" --quiet; done
+  rules:
+    - changes: ["**/*.md", "architecture/**/*"]
+    - if: $CI_COMMIT_TAG
+
+harness:secrets:
+  stage: validate
+  image: $GITLEAKS_IMAGE
+  script: [gitleaks detect --source . --redact --report-path reports/gitleaks.json]
+  artifacts: { when: always, paths: [reports/gitleaks.json], expire_in: 90 days }
+
+harness:policy:
+  stage: validate
+  script:
+    # Guardrail/policy assertions that are structural, not behavioural:
+    # e.g. a harness handling customer-pii must declare a pii-redaction guardrail.
+    - harnessctl policy-check . --policies policies.yaml
+  allow_failure: false
+
+# --------------------------------------------------------------------------
+# test — deterministic, no model calls. Must stay under 5 minutes.
+# --------------------------------------------------------------------------
+harness:unit:
+  stage: test
+  script: [harnessctl test unit --junit reports/junit-unit.xml]
+  artifacts: { when: always, reports: { junit: reports/junit-unit.xml } }
+
+harness:prompt-contract:
+  stage: test
+  script:
+    # Renders every prompt template with every fixture and asserts the result is
+    # well-formed, within the token budget, and free of leaked placeholders.
+    - harnessctl test prompts --junit reports/junit-prompts.xml
+  artifacts: { when: always, reports: { junit: reports/junit-prompts.xml } }
+
+harness:smoke:
+  stage: test
+  timeout: $[[ inputs.smoke_timeout ]]
+  script: [harnessctl run docs/quickstart.md --assert-exit-zero]
+  rules:
+    - if: $CI_MERGE_REQUEST_IID
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# --------------------------------------------------------------------------
+# evaluate — the expensive stage. Gated by thresholds.yaml.
+# --------------------------------------------------------------------------
+.evaluate:
+  stage: evaluate
+  script:
+    - harnessctl evaluate
+        --suite $SUITE
+        --thresholds evaluations/thresholds.yaml
+        --out evaluations/results/$CI_PIPELINE_ID-$SUITE.json
+    - harnessctl evaluate-gate evaluations/results/$CI_PIPELINE_ID-$SUITE.json
+  artifacts:
+    when: always
+    paths: [evaluations/results/]
+    expire_in: 1 year          # retained; the registry copies them into the index
+
+evaluate:golden:
+  extends: .evaluate
+  variables: { SUITE: golden }
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_MERGE_REQUEST_IID && $[[ inputs.eval_schedule_only ]] == false
+    - if: $CI_MERGE_REQUEST_LABELS =~ /run-full-eval/
+
+evaluate:adversarial:
+  extends: .evaluate
+  variables: { SUITE: adversarial }
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+evaluate:regression:
+  extends: .evaluate
+  variables: { SUITE: regression }
+  # Compares against the last released tag's stored results and fails on drift
+  # larger than thresholds.yaml:regression.max_delta.
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+# --------------------------------------------------------------------------
+# package — SBOM, lockfile, signed release
+# --------------------------------------------------------------------------
+harness:sbom:
+  stage: package
+  image: $SYFT_IMAGE
+  script: [syft dir:. -o cyclonedx-json=sbom.cdx.json]
+  artifacts: { paths: [sbom.cdx.json], expire_in: 2 years }
+  rules: [{ if: $CI_COMMIT_TAG }, { if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH }]
+
+harness:lock:
+  stage: package
+  script:
+    # Resolves plugin ranges and harness dependency ranges against the registry
+    # snapshot, writing concrete versions. Committed back on release MRs only.
+    - harnessctl lock --registry $REGISTRY_SNAPSHOT_URL --out harness.lock
+  artifacts: { paths: [harness.lock] }
+
+harness:release:
+  stage: package
+  script:
+    - harnessctl verify-tag-signature $CI_COMMIT_TAG
+    - harnessctl changelog-extract $CI_COMMIT_TAG > release-notes.md
+  release:
+    tag_name: $CI_COMMIT_TAG
+    description: release-notes.md
+    assets:
+      links:
+        - { name: "SBOM", url: "$CI_PROJECT_URL/-/jobs/$CI_JOB_ID/artifacts/raw/sbom.cdx.json" }
+        - { name: "Evaluation report", url: "$CI_PROJECT_URL/-/jobs/$CI_JOB_ID/artifacts/browse/evaluations/results" }
+  rules: [{ if: $CI_COMMIT_TAG }]
+
+# --------------------------------------------------------------------------
+# publish — hand a pre-built card fragment to the registry and wake it up.
+# The registry still re-derives everything from the API; this is a latency
+# optimisation and a self-description, never the source of truth.
+# --------------------------------------------------------------------------
+harness:card:
+  stage: publish
+  script:
+    - harnessctl card . --pipeline $CI_PIPELINE_ID --commit $CI_COMMIT_SHA --out harness-card.partial.json
+  artifacts:
+    paths: [harness-card.partial.json]
+    expire_in: never
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+registry:notify:
+  stage: publish
+  needs: [harness:card]
+  trigger:
+    project: ai-platform/harness-registry
+    branch: main
+    strategy: depend
+  variables:
+    UPSTREAM_HARNESS_PROJECT: $CI_PROJECT_PATH
+    UPSTREAM_COMMIT: $CI_COMMIT_SHA
+    INCREMENTAL: "true"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG

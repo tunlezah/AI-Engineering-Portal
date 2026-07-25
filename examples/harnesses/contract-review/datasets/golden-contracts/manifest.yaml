@@ -1,0 +1,68 @@
+# Dataset manifest. The data itself is stored via Git LFS in this directory and
+# never leaves the repository; the registry indexes this manifest only.
+apiVersion: harness.registry.acme.internal/v1
+kind: Dataset
+id: golden-contracts
+version: v4
+
+description: >
+  180 anonymised commercial contracts with lawyer-produced first-pass reviews,
+  used as the golden evaluation set for the contract-review harness.
+
+classification: confidential
+data_types: [legal-privileged, customer-pii]
+provenance: hand-labelled
+retention: "3 years from case creation; quarterly retirement job removes older cases."
+
+approval:
+  legal_clearance: LEG-2025-0417
+  cleared_by: "@s.bahri"
+  cleared_on: "2025-11-03"
+  conditions:
+    - "Counterparty names replaced with stable pseudonyms (CP-001 ... CP-180)."
+    - "Monetary values scaled by a per-case random factor in [0.8, 1.25]."
+    - "Use restricted to evaluation of ACME legal-AI systems. No model training."
+
+composition:
+  by_agreement_type:
+    msa: 68
+    dpa: 31
+    nda: 44
+    sow: 24
+    reseller: 13
+  by_jurisdiction:
+    england-wales: 96
+    scotland: 8
+    new-york: 41
+    delaware: 22
+    other: 13
+  by_length_pages:
+    p1_10: 52
+    p11_40: 91
+    p41_plus: 37
+  contested_labels: 14        # scored separately; excluded from headline pass rate
+
+labelling:
+  reviewers_per_case: 2
+  adjudication: "Third qualified lawyer resolves disagreements."
+  inter_annotator_agreement:
+    clause_type: 0.91
+    severity: 0.83
+  label_schema: datasets/golden-contracts/label-schema.json
+  guidance: datasets/golden-contracts/labelling-guide.md
+
+known_biases:
+  - "Over-represents technology and professional-services contracts; under-represents manufacturing supply agreements."
+  - "Skewed toward tier-2/tier-3 counterparties because tier-1 contracts are more often on ACME paper."
+  - "Sampled from 2023-2026; pre-2023 drafting conventions are absent."
+
+files:
+  cases: "cases/*.yaml"            # one case per file: input ref, labels, expectations
+  documents: "documents/*.pdf"     # Git LFS
+  checksum_manifest: "SHA256SUMS"
+
+changelog:
+  - v4: "2026-05-14 — +20 DPA cases with the 2025 EU AI Act addendum clauses."
+  - v3: "2026-01-22 — re-labelled severity under the revised tier profile."
+  - v2: "2025-08-30 — added contested-label tracking."
+  - v1: "2025-04-02 — initial 120 cases."

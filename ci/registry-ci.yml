@@ -1,0 +1,185 @@
+# ==========================================================================
+# Registry pipeline — ai-platform/harness-registry/.gitlab-ci.yml
+#
+# Three trigger modes:
+#   1. incremental  — a harness pipeline finished and triggered us (fast path,
+#                     re-indexes one project, ~40s to live site)
+#   2. full         — scheduled reconciliation (hourly), crawls every group
+#   3. content      — someone edited the registry itself (taxonomy, blueprints,
+#                     governance records, theme)
+#
+# The snapshot is committed back to the `snapshot` branch by a bot so the index
+# is diffable, reviewable, revertible and auditable — Git is the database.
+# ==========================================================================
+
+variables:
+  REGISTRY_IMAGE: registry.acme.internal/ai-platform/harness-toolkit:1.8.2
+  HUGO_IMAGE: registry.acme.internal/ai-platform/hugo-extended:0.148.1
+  PAGEFIND_IMAGE: registry.acme.internal/ai-platform/pagefind:1.1.0
+  SNAPSHOT_BRANCH: snapshot
+  GIT_STRATEGY: clone
+
+stages: [crawl, index, validate, build, verify, deploy]
+
+default:
+  image: $REGISTRY_IMAGE
+  interruptible: false
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "pipeline"     # triggered by a harness project
+      variables: { MODE: incremental }
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      variables: { MODE: full }
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      variables: { MODE: content }
+    - if: $CI_MERGE_REQUEST_IID
+      variables: { MODE: content }
+
+# --------------------------------------------------------------------------
+# 1. CRAWL — discover harnesses via the GitLab API (self-hosted, on-network)
+# --------------------------------------------------------------------------
+crawl:
+  stage: crawl
+  script:
+    - |
+      if [ "$MODE" = "incremental" ]; then
+        registryctl crawl --project "$UPSTREAM_HARNESS_PROJECT" \
+                          --base snapshot/ --out crawl/
+      else
+        registryctl crawl --groups groups.yaml --concurrency 16 \
+                          --etag-cache .cache/etags.json --out crawl/
+      fi
+  cache:
+    key: crawl-etags
+    paths: [.cache/etags.json]
+  artifacts:
+    paths: [crawl/]
+    expire_in: 7 days
+
+# --------------------------------------------------------------------------
+# 2. INDEX — normalise, score, resolve relationships, emit the snapshot
+# --------------------------------------------------------------------------
+index:
+  stage: index
+  needs: [crawl]
+  script:
+    - registryctl index
+        --crawl crawl/
+        --taxonomy schema/taxonomy.yaml
+        --rubric schema/quality-rubric.yaml
+        --governance governance/
+        --skills-index vendor/skill-marketplace/index.json
+        --plugins-index vendor/plugin-marketplace/index.json
+        --out snapshot/
+    # snapshot/ contains:
+    #   registry.lock.yaml            id -> project, sha, tag, manifest digest
+    #   harnesses/<id>.json           normalised card (spec + computed status)
+    #   graph/edges.json              harness/skill/plugin/team edges
+    #   evaluations/<id>/*.json       collected reports + trend series
+    #   catalog.json                  compact facet/search payload
+    #   reports/index-report.json     warnings, downgrades, orphans
+  artifacts:
+    paths: [snapshot/]
+    reports: { dotenv: index.env }
+
+index:commit:
+  stage: index
+  needs: [index]
+  script:
+    - registryctl snapshot-commit --branch $SNAPSHOT_BRANCH --snapshot snapshot/
+    # No-op when the snapshot is byte-identical, so the history stays meaningful.
+  rules:
+    - if: $MODE != "content"
+
+# --------------------------------------------------------------------------
+# 3. VALIDATE — the registry's own quality gate
+# --------------------------------------------------------------------------
+validate:snapshot:
+  stage: validate
+  needs: [index]
+  script:
+    - registryctl verify-snapshot snapshot/       # referential integrity, no dangling refs, no dep cycles
+    - registryctl diff-report --base $SNAPSHOT_BRANCH --head snapshot/ --out reports/diff.md
+    # Fails the pipeline if > 10% of harnesses would disappear: protects against
+    # a bad crawl (expired token, group rename) silently emptying the registry.
+    - registryctl guard-mass-change --max-removed-pct 10
+  artifacts: { when: always, paths: [reports/], expire_in: 30 days }
+
+validate:mr-comment:
+  stage: validate
+  needs: [validate:snapshot]
+  script: [registryctl post-mr-note reports/diff.md]
+  rules: [{ if: $CI_MERGE_REQUEST_IID }]
+
+# --------------------------------------------------------------------------
+# 4. BUILD — content adapters turn the snapshot into pages, Hugo renders them
+# --------------------------------------------------------------------------
+build:site:
+  stage: build
+  needs: [index]
+  image: $HUGO_IMAGE
+  script:
+    - registryctl emit-content --snapshot snapshot/ --out content/generated/
+    - hugo --minify --gc --destination public --baseURL "$REGISTRY_BASE_URL"
+  artifacts: { paths: [public/], expire_in: 7 days }
+
+build:search:
+  stage: build
+  needs: [build:site]
+  image: $PAGEFIND_IMAGE
+  script:
+    - pagefind --site public --output-subdir _pagefind --force-language en
+    # The compact facet payload is produced by the indexer, not Pagefind:
+    - cp snapshot/catalog.json public/catalog.json
+    - gzip -9 -k public/catalog.json
+  artifacts: { paths: [public/], expire_in: 7 days }
+
+# --------------------------------------------------------------------------
+# 5. VERIFY — never ship a broken registry
+# --------------------------------------------------------------------------
+verify:site:
+  stage: verify
+  needs: [build:search]
+  script:
+    - registryctl check-links public/ --offline --fail-on-external
+    - registryctl check-a11y public/ --sample 40 --standard wcag21aa
+    - registryctl check-budget public/ --max-page-kb 400 --max-catalog-mb 6
+    - registryctl check-no-external-assets public/    # hard fail on any http(s):// asset reference
+  artifacts: { when: always, paths: [reports/], expire_in: 30 days }
+
+# --------------------------------------------------------------------------
+# 6. DEPLOY — GitLab Pages
+# --------------------------------------------------------------------------
+pages:
+  stage: deploy
+  needs: [build:search, verify:site]
+  script: [echo "Publishing $(find public -name '*.html' | wc -l) pages"]
+  artifacts: { paths: [public/] }
+  environment:
+    name: registry
+    url: $REGISTRY_BASE_URL
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $MODE == "incremental"
+    - if: $MODE == "full"
+
+pages:review:
+  stage: deploy
+  needs: [build:search]
+  script: [echo review app]
+  artifacts: { paths: [public/] }
+  pages:
+    path_prefix: "mr-$CI_MERGE_REQUEST_IID"
+  environment:
+    name: review/mr-$CI_MERGE_REQUEST_IID
+    url: $REGISTRY_BASE_URL/mr-$CI_MERGE_REQUEST_IID/
+    on_stop: pages:review:stop
+  rules: [{ if: $CI_MERGE_REQUEST_IID }]
+
+pages:review:stop:
+  stage: deploy
+  script: [registryctl pages-delete "mr-$CI_MERGE_REQUEST_IID"]
+  environment: { name: review/mr-$CI_MERGE_REQUEST_IID, action: stop }
+  when: manual
+  rules: [{ if: $CI_MERGE_REQUEST_IID }]

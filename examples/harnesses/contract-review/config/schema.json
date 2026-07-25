@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gitlab.acme.internal/ai-platform/harnesses/legal/contract-review/config/schema.json",
+  "title": "Contract Review Harness runtime configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["model", "playbook_id"],
+  "properties": {
+    "model": {
+      "type": "string",
+      "enum": ["claude-sonnet-5", "claude-opus-5"],
+      "default": "claude-sonnet-5",
+      "description": "Use claude-opus-5 for tier-1 counterparties: +1.8pp severity agreement, ~2.4x cost."
+    },
+    "playbook_id": {
+      "type": "string",
+      "enum": ["uk-standard", "us-standard", "public-sector"]
+    },
+    "severity_profile": {
+      "type": "string",
+      "enum": ["balanced", "conservative", "permissive"],
+      "default": "balanced"
+    },
+    "counterparty_tier": {
+      "type": "string",
+      "enum": ["tier-1", "tier-2", "tier-3", "tier-4"],
+      "default": "tier-3"
+    },
+    "retrieval": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "top_k": { "type": "integer", "minimum": 3, "maximum": 12, "default": 8 },
+        "rerank": { "type": "boolean", "default": true },
+        "min_score": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.35 }
+      }
+    },
+    "grounding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_retries": { "type": "integer", "minimum": 0, "maximum": 3, "default": 2 },
+        "on_failure": {
+          "type": "string",
+          "enum": ["drop", "flag"],
+          "default": "drop",
+          "description": "'flag' emits the finding marked ungrounded. Prohibited when security.classification is confidential or above."
+        }
+      }
+    },
+    "concurrency": { "type": "integer", "minimum": 1, "maximum": 16, "default": 8 },
+    "cost_ceiling_gbp": { "type": "number", "minimum": 0.1, "maximum": 20, "default": 2.0 },
+    "write_back": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Optional matter-management integration. Requires the matter-management plugin.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "matter_id": { "type": "string", "pattern": "^MAT-[0-9]{6}$" },
+        "only_after_signoff": { "type": "boolean", "default": true, "const": true }
+      }
+    }
+  }
+}

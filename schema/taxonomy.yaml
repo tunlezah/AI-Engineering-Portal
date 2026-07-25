@@ -1,0 +1,188 @@
+# Canonical taxonomy for the AI Harness Registry.
+#
+# Governance: this file is owned by group:ai-platform-governance. Adding a term
+# requires an MR with two approvals and evidence of >= 3 existing harnesses that
+# would use it. Terms are never deleted, only marked `deprecated: true` with a
+# `superseded_by`, so old manifests keep validating and old URLs keep resolving.
+#
+# Two independent axes are used deliberately (see design doc section 8):
+#   business  -> "whose problem does this solve?"  (stable, org-shaped, ~15 terms)
+#   technical -> "how is it built?"                (volatile, pattern-shaped)
+# A third axis, `lifecycle`, is not part of the taxonomy; it lives in the manifest.
+
+version: 3
+updated: 2026-06-30
+
+business:
+  - id: customer-support
+    label: Customer Support
+    description: Contact centre deflection, agent assist, case summarisation.
+    steward: group:cx-ai
+  - id: legal
+    label: Legal
+    description: Contracts, compliance advice, regulatory interpretation, privilege-aware workflows.
+    steward: group:legal-ai-platform
+  - id: finance
+    label: Finance
+    description: Reporting, reconciliation, forecasting, controls, audit support.
+    steward: group:finance-ai
+  - id: risk-compliance
+    label: Risk & Compliance
+    description: Financial crime, conduct, regulatory reporting, model risk.
+    steward: group:risk-ai
+  - id: hr-people
+    label: HR & People
+    description: Policy Q&A, recruitment support, employee-facing assistants.
+    steward: group:people-tech
+  - id: sales-marketing
+    label: Sales & Marketing
+    description: Proposal drafting, campaign analysis, CRM enrichment.
+    steward: group:commercial-ai
+  - id: operations
+    label: Operations
+    description: Back-office process automation, exception handling, supply chain.
+    steward: group:ops-ai
+  - id: engineering
+    label: Engineering
+    description: Harnesses whose users are engineers building software.
+    steward: group:developer-experience
+  - id: it-service
+    label: IT Service Management
+    description: Service desk, incident triage, change management.
+    steward: group:itsm-ai
+  - id: security
+    label: Security
+    description: Detection engineering, triage, threat intel summarisation, secure code review.
+    steward: group:security-engineering
+  - id: data-analytics
+    label: Data & Analytics
+    description: Analyst assistance, semantic layers, metric explanation.
+    steward: group:data-platform
+  - id: knowledge
+    label: Knowledge Management
+    description: Enterprise search, documentation, onboarding, tacit knowledge capture.
+    steward: group:knowledge-services
+  - id: procurement
+    label: Procurement
+    description: Supplier assessment, RFP handling, spend analysis.
+    steward: group:procurement-ai
+  - id: cross-functional
+    label: Cross-functional
+    description: Genuinely domain-neutral harnesses. Use sparingly; abuse of this term is the main taxonomy failure mode.
+    steward: group:ai-platform-governance
+
+technical:
+  # --- Orchestration shape -------------------------------------------------
+  - id: single-turn
+    label: Single-turn Completion
+    axis: orchestration
+    description: One prompt, one response, no tool use.
+  - id: conversational
+    label: Conversational
+    axis: orchestration
+    description: Multi-turn dialogue with state.
+  - id: workflow
+    label: Deterministic Workflow
+    axis: orchestration
+    description: Fixed DAG of model and tool steps; control flow is code, not model output.
+  - id: agentic
+    label: Agentic Loop
+    axis: orchestration
+    description: Model chooses next action from a tool set until a stop condition.
+  - id: multi-agent
+    label: Multi-agent
+    axis: orchestration
+    description: Multiple cooperating roles with an explicit coordination protocol.
+  - id: planner-executor
+    label: Planner / Executor
+    axis: orchestration
+    description: Plan is produced, validated, then executed separately.
+
+  # --- Knowledge access ----------------------------------------------------
+  - id: rag
+    label: Retrieval Augmented Generation
+    axis: knowledge
+  - id: hybrid-search
+    label: Hybrid Search
+    axis: knowledge
+    description: Lexical + vector retrieval with fusion and/or reranking.
+  - id: graph-retrieval
+    label: Graph Retrieval
+    axis: knowledge
+  - id: sql-retrieval
+    label: Structured / SQL Retrieval
+    axis: knowledge
+  - id: long-context
+    label: Long Context
+    axis: knowledge
+    description: Relies on large context windows rather than retrieval.
+
+  # --- Capability ----------------------------------------------------------
+  - id: tool-calling
+    label: Tool Calling
+    axis: capability
+  - id: code-generation
+    label: Code Generation
+    axis: capability
+  - id: extraction
+    label: Structured Extraction
+    axis: capability
+  - id: classification
+    label: Classification
+    axis: capability
+  - id: summarisation
+    label: Summarisation
+    axis: capability
+  - id: analysis
+    label: Analysis & Reasoning
+    axis: capability
+  - id: automation
+    label: Process Automation
+    axis: capability
+  - id: multimodal
+    label: Multimodal
+    axis: capability
+
+  # --- Cross-cutting engineering concerns ----------------------------------
+  - id: evaluation
+    label: Evaluation
+    axis: concern
+    description: Harnesses whose product is a judgement about other systems.
+  - id: testing
+    label: Testing
+    axis: concern
+  - id: guardrails
+    label: Guardrails & Safety
+    axis: concern
+  - id: governance
+    label: Governance & Audit
+    axis: concern
+  - id: observability
+    label: Observability
+    axis: concern
+  - id: infrastructure
+    label: Infrastructure
+    axis: concern
+  - id: developer-tools
+    label: Developer Tools
+    axis: concern
+  - id: productivity
+    label: Productivity
+    axis: concern
+
+# Reference architectures are a separate, curated list (not free taxonomy terms).
+# A harness declares exactly one `spec.architecture.pattern` from here.
+reference_architectures:
+  - id: simple-chat
+  - id: rag
+  - id: hybrid-search
+  - id: multi-agent
+  - id: planner
+  - id: research-assistant
+  - id: document-review
+  - id: code-assistant
+  - id: sql-agent
+  - id: workflow-automation
+  - id: knowledge-assistant
+  - id: tool-calling
+  - id: evaluation-harness

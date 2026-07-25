@@ -1,0 +1,138 @@
+# Deterministic orchestration. Control flow is data, not model output:
+# the model classifies, assesses and drafts, but never decides what runs next.
+apiVersion: harness.registry.acme.internal/v1
+kind: Workflow
+id: contract-review
+version: 2.3.1
+
+inputs: [contract_file, playbook_id, counterparty_tier, focus_clauses]
+
+budget:
+  max_cost_gbp: "{{ config.cost_ceiling_gbp }}"
+  max_wall_clock_s: 300
+  on_exceeded: return-partial     # partial findings + explicit truncation notice
+
+steps:
+
+  - id: parse
+    uses: plugin:document-parser@^3.2.0
+    with:
+      file: "{{ inputs.contract_file }}"
+      emit_anchors: true          # page + paragraph anchors underpin every citation
+      reject_image_only: true
+    on_error: fail
+
+  - id: redact
+    uses: plugin:pii-redactor@^2.0.0
+    guardrail: redact-before-inference
+    with:
+      text: "{{ steps.parse.text }}"
+      types: [person, address, email, phone, account-number]
+      mode: placeholder
+    on_error: fail                # never proceed to inference unredacted
+
+  - id: segment
+    uses: harness:document-segmentation@^4.0.0
+    with:
+      text: "{{ steps.redact.text }}"
+      profile: legal-clause
+    outputs: [clauses]
+
+  - id: classify
+    for_each: "{{ steps.segment.clauses }}"
+    concurrency: 8
+    uses: model
+    with:
+      prompt: prompts/clause-classification.md
+      model: "{{ config.model }}"
+      temperature: 0
+      response_schema: schemas/classification.json
+      vars:
+        clause_text: "{{ item.text }}"
+        clause_anchor: "{{ item.anchor }}"
+        taxonomy: "{{ data.clause_taxonomy }}"
+    retry: { max: 2, on: [schema-invalid, transient] }
+
+  - id: route
+    uses: code
+    with:
+      script: workflows/steps/route.py
+      # Splits into: assessable clauses, low-confidence clauses (-> human queue),
+      # and clauses excluded by focus_clauses.
+
+  - id: retrieve
+    for_each: "{{ steps.route.assessable }}"
+    concurrency: 8
+    uses: plugin:legal-playbook-search@^1.6.0
+    with:
+      query: "{{ item.text }}"
+      filters: { playbook: "{{ inputs.playbook_id }}", clause_type: "{{ item.type }}" }
+      strategy: hybrid
+      top_k: "{{ config.retrieval.top_k }}"
+      rerank: internal-rerank-v2
+
+  - id: assess
+    for_each: "{{ steps.retrieve.results }}"
+    concurrency: 6
+    uses: model
+    with:
+      prompt: prompts/finding-generation.md
+      model: "{{ config.model }}"
+      temperature: 0.1
+      response_schema: schemas/finding.json
+      vars:
+        clause: "{{ item.clause }}"
+        playbook_positions: "{{ item.positions }}"
+        precedents: "{{ item.precedents }}"
+        severity_profile: "{{ config.severity_profile }}"
+
+  - id: ground
+    guardrail: citation-required
+    uses: code
+    with:
+      script: workflows/steps/grounding.py
+      # Exact-match verification of `evidence` against source text, and of every
+      # citation id against the retrieved set. Failures re-run `assess` once,
+      # then the finding is dropped and counted in coverage_report.dropped.
+    retry: { max: "{{ config.grounding.max_retries }}", target: assess }
+
+  - id: filter
+    guardrail: no-legal-advice-language
+    uses: code
+    with:
+      script: workflows/steps/advice_filter.py
+      rules: guardrails/no-advice.yaml
+
+  - id: summarise
+    uses: model
+    with:
+      prompt: prompts/executive-summary.md
+      model: "{{ config.model }}"
+      vars: { findings: "{{ steps.filter.findings }}" }
+
+  - id: coverage
+    uses: code
+    with: { script: workflows/steps/coverage.py }
+
+  - id: signoff
+    guardrail: lawyer-signoff
+    uses: human
+    with:
+      queue: legal-review
+      required_role: qualified-lawyer
+      sla_hours: 24
+      present: [summary, findings, coverage_report]
+      # The run is not complete, and nothing is written back to the matter
+      # record, until a lawyer accepts or rejects.
+
+outputs:
+  findings: "{{ steps.filter.findings }}"
+  summary: "{{ steps.summarise.text }}"
+  coverage_report: "{{ steps.coverage.report }}"
+  audit_record:
+    model: "{{ config.model }}"
+    model_build: "{{ runtime.model_build }}"
+    prompt_versions: "{{ runtime.prompt_versions }}"
+    retrieved: "{{ steps.retrieve.document_ids }}"
+    guardrails: "{{ runtime.guardrail_decisions }}"
+    signoff: "{{ steps.signoff.decision }}"

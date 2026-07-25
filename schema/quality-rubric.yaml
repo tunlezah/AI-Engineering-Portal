@@ -1,0 +1,166 @@
+# Quality scoring rubric — owned by group:ai-platform-governance.
+#
+# The quality score is COMPUTED by the indexer from observable facts only.
+# No harness author can write their own score. Every signal below must be
+# derivable from: the manifest, the repository tree, the Git history, the
+# evaluation reports, the CI job statuses, or the governance records.
+#
+# Score is reported as 0-100 plus the per-dimension breakdown, because a single
+# number is only useful when you can see what dropped it.
+
+version: 2
+scale: 100
+
+dimensions:
+
+  documentation:
+    weight: 15
+    signals:
+      - id: readme-sections
+        points: 5
+        rule: "README.md contains all required H2 sections (Overview, Quick Start, Configuration, Limitations, Support)."
+      - id: quickstart-executable
+        points: 4
+        rule: "docs/quickstart runs green in the harness pipeline's `smoke` job within 10 minutes."
+      - id: architecture-diagram
+        points: 3
+        rule: "architecture/ contains >= 1 Mermaid diagram that renders in CI."
+      - id: no-broken-links
+        points: 3
+        rule: "Link checker reports zero broken internal links."
+
+  metadata:
+    weight: 10
+    signals:
+      - id: schema-valid
+        points: 4
+        rule: "harness.yaml validates against harness.schema.json (hard gate: score 0 overall if this fails)."
+      - id: optional-completeness
+        points: 3
+        rule: "Share of optional manifest fields populated, scaled 0-3."
+      - id: limitations-declared
+        points: 3
+        rule: ">= 3 entries in spec.limitations."
+
+  evaluation:
+    weight: 30
+    signals:
+      - id: golden-suite-exists
+        points: 6
+        rule: "At least one suite of kind `golden` with >= 50 cases."
+      - id: pass-rate
+        points: 8
+        rule: "Latest pass_rate scaled: >=0.95 -> 8, >=0.90 -> 6, >=0.80 -> 3, else 0."
+      - id: coverage
+        points: 5
+        rule: "totals.coverage >= 0.8 -> 5, >= 0.6 -> 3, else 0."
+      - id: adversarial-suite
+        points: 5
+        rule: "A suite of kind `adversarial` or `guardrail` exists and passes."
+      - id: freshness
+        points: 3
+        rule: "Most recent evaluation run is <= 30 days old."
+      - id: trend
+        points: 3
+        rule: "No unexplained regression > 2pp in pass_rate across the last 3 runs."
+
+  engineering:
+    weight: 20
+    signals:
+      - id: pipeline-green
+        points: 5
+        rule: "Default-branch pipeline status is success."
+      - id: unit-tests
+        points: 4
+        rule: "tests/ present and executed in CI with a machine-readable report."
+      - id: pinned-dependencies
+        points: 4
+        rule: "All plugin and harness dependencies resolve to concrete versions in harness.lock."
+      - id: reproducible-eval
+        points: 4
+        rule: "Evaluation run records seed, model build and dataset checksum."
+      - id: changelog
+        points: 3
+        rule: "CHANGELOG.md has an entry for the latest released tag."
+
+  security:
+    weight: 15
+    signals:
+      - id: secret-scan
+        points: 5
+        rule: "gitleaks clean on full history."
+      - id: sbom
+        points: 3
+        rule: "CycloneDX SBOM published for the latest release."
+      - id: signed-release
+        points: 3
+        rule: "Latest tag is signed by a key in the platform trust store."
+      - id: plugin-trust
+        points: 4
+        rule: "All required plugins are trust_tier core or certified (community -> 2, experimental -> 0)."
+
+  stewardship:
+    weight: 10
+    signals:
+      - id: owner-valid
+        points: 3
+        rule: "spec owner group exists and has >= 2 active members."
+      - id: codeowners
+        points: 2
+        rule: "CODEOWNERS present and matches metadata.maintainers."
+      - id: review-recency
+        points: 3
+        rule: "Governance review recorded within the review interval for its lifecycle tier."
+      - id: responsiveness
+        points: 2
+        rule: "Median first response on issues over the last 90 days <= 5 working days (0 open issues counts as full marks)."
+
+# Hard gates: failing any of these caps the score regardless of other points.
+gates:
+  - id: schema-valid
+    cap: 0
+  - id: secret-scan
+    cap: 0
+  - id: pipeline-green
+    cap: 59
+
+bands:
+  - { min: 90, label: "A", colour: "green" }
+  - { min: 75, label: "B", colour: "green" }
+  - { min: 60, label: "C", colour: "amber" }
+  - { min: 40, label: "D", colour: "amber" }
+  - { min: 0,  label: "E", colour: "red" }
+
+# Lifecycle gates — the minimum objective evidence for each declared tier.
+# The indexer DOWNGRADES a manifest that over-claims and raises a warning issue.
+lifecycle_gates:
+  experimental:
+    requires: [schema-valid, owner-valid]
+    review_interval_days: 180
+  prototype:
+    requires: [schema-valid, owner-valid, readme-sections, pipeline-green]
+    review_interval_days: 180
+  team-ready:
+    requires: [schema-valid, owner-valid, readme-sections, pipeline-green, unit-tests,
+               golden-suite-exists, quickstart-executable, secret-scan, changelog]
+    min_score: 60
+    review_interval_days: 180
+  org-ready:
+    requires: [team-ready, adversarial-suite, coverage, pinned-dependencies, sbom,
+               architecture-diagram, plugin-trust, codeowners]
+    min_score: 75
+    min_pass_rate: 0.90
+    review_interval_days: 90
+  certified:
+    requires: [org-ready, signed-release, reproducible-eval, freshness]
+    min_score: 90
+    min_pass_rate: 0.95
+    human_review: required
+    governance_record: required   # entry in registry certifications/<id>.yaml
+    review_interval_days: 90
+  deprecated:
+    requires: [schema-valid]
+    manifest_requires: [spec.deprecation]
+  retired:
+    requires: [schema-valid]
+    manifest_requires: [spec.deprecation]

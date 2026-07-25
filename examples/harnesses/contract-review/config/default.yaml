@@ -1,0 +1,24 @@
+# Default runtime configuration. Validated against config/schema.json in CI.
+# Contains no secrets and no endpoints — credentials and service addresses are
+# supplied by the runtime environment, never by the harness.
+
+model: claude-sonnet-5
+playbook_id: uk-standard
+severity_profile: balanced
+counterparty_tier: tier-3
+
+retrieval:
+  top_k: 8
+  rerank: true
+  min_score: 0.35
+
+grounding:
+  max_retries: 2
+  on_failure: drop
+
+concurrency: 8
+cost_ceiling_gbp: 2.0
+
+write_back:
+  enabled: false
+  only_after_signoff: true

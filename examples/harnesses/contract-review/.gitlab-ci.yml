@@ -1,0 +1,22 @@
+# The entire pipeline comes from the shared template. A harness project should
+# need no bespoke CI: if it does, that is a signal the template is missing
+# something and should be raised against ai-platform/harness-registry.
+
+include:
+  - project: ai-platform/harness-registry
+    ref: v1
+    file: /ci/harness-ci.yml
+    inputs:
+      eval_schedule_only: true
+      smoke_timeout: 12m
+
+# Harness-specific addition: the golden dataset lives in Git LFS and must be
+# fetched before evaluation. This is the only local job.
+.evaluate:
+  before_script:
+    - git lfs pull --include "datasets/golden-contracts/documents/*"
+    - harnessctl verify-dataset datasets/golden-contracts/ --checksums SHA256SUMS
+
+# Scheduled pipelines (nightly 03:00 UTC) run the full evaluation matrix and
+# refresh the registry card even when nothing changed — this is how score
+# freshness and model-drift detection work.

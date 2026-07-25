@@ -1,0 +1,32 @@
+# Enforced by protected branches + approval rules. Must stay consistent with
+# metadata.maintainers in harness.yaml — `harnessctl lint-metadata` fails otherwise.
+
+* @a.okafor @s.lindqvist @r.das
+
+# The manifest is the registry contract: owner group approval required.
+[Manifest]
+/harness.yaml @a.okafor @s.lindqvist
+
+# Prompt and guardrail changes are behavioural changes.
+[Behaviour]
+/prompts/ @a.okafor @s.lindqvist @r.das
+/guardrails/ @a.okafor @s.lindqvist
+/workflows/ @a.okafor @s.lindqvist
+
+# Evaluation integrity: thresholds and datasets cannot be relaxed by the team
+# that benefits from relaxing them.
+[Evaluation] @ai-platform-governance
+/evaluations/thresholds.yaml @ai-platform-governance @a.okafor
+/evaluations/suites/ @ai-platform-governance @a.okafor
+/datasets/ @s.bahri @ai-platform-governance
+
+# Legal sign-off on anything that changes what a lawyer sees.
+[Legal] @s.bahri
+/prompts/system.md @s.bahri
+/guardrails/no-advice.yaml @s.bahri
+/docs/disclaimer.md @s.bahri
+
+# Security review for dependency and permission changes.
+[Security] @security-engineering
+/harness.lock @security-engineering
+/.gitlab-ci.yml @security-engineering

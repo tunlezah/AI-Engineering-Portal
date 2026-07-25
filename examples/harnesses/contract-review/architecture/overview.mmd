@@ -1,0 +1,56 @@
+%% Contract Review Harness — component view
+%% Rendered by the registry; validated by mermaid-cli in CI.
+flowchart TB
+    subgraph Client["Consuming skill"]
+        S1["skill://contract-triage"]
+        S2["skill://supplier-onboarding-review"]
+        S3["skill://nda-fast-track"]
+    end
+
+    subgraph Harness["contract-review v2.3.1"]
+        direction TB
+        W["Workflow engine<br/>workflows/review.yaml"]
+        P1["prompts/clause-classification"]
+        P2["prompts/finding-generation"]
+        P3["prompts/executive-summary"]
+        G1{{"Guardrail: PII redaction<br/>blocking"}}
+        G2{{"Guardrail: citation grounding<br/>blocking"}}
+        G3{{"Guardrail: no-advice filter<br/>blocking"}}
+        G4{{"Guardrail: lawyer sign-off<br/>blocking"}}
+    end
+
+    subgraph Deps["Composed harnesses"]
+        D1["document-segmentation ^4.0.0"]
+        D2["citation-grounding ^2.2.0"]
+    end
+
+    subgraph Plugins["Required plugins"]
+        PL1["document-parser ^3.2.0"]
+        PL2["legal-playbook-search ^1.6.0"]
+        PL3["pii-redactor ^2.0.0"]
+        PL4["matter-management ^4.1.0<br/><i>optional</i>"]
+    end
+
+    subgraph Platform["Platform services (internal)"]
+        M["Model gateway<br/>claude-sonnet-5 / claude-opus-5"]
+        R[("legal-playbook-v7<br/>hybrid index")]
+        A[("Audit store")]
+    end
+
+    S1 & S2 & S3 --> W
+    W --> PL1 --> G1
+    G1 --> PL3
+    W --> D1
+    W --> P1 --> M
+    W --> PL2 --> R
+    W --> P2 --> M
+    W --> G2 --> D2
+    W --> P3 --> M
+    W --> G3 --> G4
+    G4 --> PL4
+    W --> A
+
+    classDef guard fill:#fde8e8,stroke:#b91c1c,color:#7f1d1d;
+    classDef opt stroke-dasharray: 4 3;
+    class G1,G2,G3,G4 guard;
+    class PL4 opt;

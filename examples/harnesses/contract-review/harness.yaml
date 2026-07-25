@@ -1,0 +1,208 @@
+apiVersion: harness.registry.acme.internal/v1
+kind: Harness
+
+metadata:
+  id: contract-review
+  name: Contract Review Harness
+  summary: Clause-level risk review of commercial contracts with citation-backed findings and playbook alignment.
+  description: >
+    Reviews inbound third-party commercial contracts (MSAs, DPAs, NDAs, SOWs)
+    against the ACME Legal playbook. Segments the document into clauses, classifies
+    each clause, retrieves the matching playbook position and precedent language,
+    and produces a findings table with severity, rationale, quoted evidence and
+    suggested fallback wording. Designed to shorten first-pass review, not to
+    replace a lawyer: every finding carries a citation and the output is explicitly
+    marked as draft legal work product.
+  owner: group:legal-ai-platform
+  maintainers:
+    - "@a.okafor"
+    - "@s.lindqvist"
+    - "@r.das"
+  team: legal-ai-platform
+  tags:
+    - contracts
+    - clause-extraction
+    - playbook
+    - citations
+    - legal-review
+
+spec:
+  version: 2.3.1
+  lifecycle: certified
+
+  domains:
+    business: [legal, procurement]
+    technical: [workflow, hybrid-search, extraction, guardrails]
+
+  architecture:
+    pattern: document-review
+    deviations:
+      - "Uses a deterministic clause segmenter before retrieval rather than fixed-size chunking, because clause boundaries are the unit of legal meaning."
+      - "Runs a second grounding pass over every finding; the blueprint treats grounding as optional."
+
+  models:
+    supported:
+      - claude-opus-5
+      - claude-sonnet-5
+    default: claude-sonnet-5
+    unsupported:
+      - model: claude-haiku-4-5
+        reason: "Clause classification F1 drops to 0.71 (golden suite v4); below the 0.85 gate."
+
+  runtimes:
+    - agent-sdk-python
+    - orchestrator-service
+    - cli
+
+  plugins:
+    required:
+      - id: document-parser
+        range: "^3.2.0"
+        purpose: "PDF/DOCX to structured text with page and paragraph anchors for citations."
+        trust_tier: core
+      - id: legal-playbook-search
+        range: "^1.6.0"
+        purpose: "Hybrid search over the Legal playbook and precedent clause bank."
+        trust_tier: certified
+      - id: pii-redactor
+        range: "^2.0.0"
+        purpose: "Redacts counterparty personal data before any model call."
+        trust_tier: core
+    optional:
+      - id: matter-management
+        range: "^4.1.0"
+        purpose: "Writes findings back to the matter record in the legal case system."
+        trust_tier: certified
+
+  retrieval:
+    enabled: true
+    strategy: hybrid
+    index: legal-playbook-v7
+    chunking: "Clause-aware: one chunk per playbook position, max 900 tokens, no overlap."
+    embedding_model: internal-embed-v3
+    top_k: 8
+    reranker: internal-rerank-v2
+
+  dependencies:
+    - harness: document-segmentation
+      range: "^4.0.0"
+      kind: composes
+    - harness: citation-grounding
+      range: "^2.2.0"
+      kind: composes
+
+  interfaces:
+    inputs:
+      - name: contract_file
+        type: file
+        format: pdf
+        description: "The third-party contract under review. Max 200 pages."
+        required: true
+      - name: playbook_id
+        type: string
+        description: "Playbook variant, e.g. 'uk-standard', 'us-standard', 'public-sector'."
+        required: true
+      - name: counterparty_tier
+        type: string
+        description: "Commercial tier; drives severity thresholds. One of tier-1..tier-4."
+        required: false
+      - name: focus_clauses
+        type: array
+        description: "Optional clause-type allowlist to narrow the review."
+        required: false
+    outputs:
+      - name: findings
+        type: array
+        description: "Ordered findings: clause ref, clause type, severity, position, rationale, quoted evidence, suggested wording."
+      - name: summary
+        type: string
+        format: markdown
+        description: "Executive summary for the reviewing lawyer, max 400 words."
+      - name: coverage_report
+        type: object
+        description: "Which playbook positions were checked, which clauses were unmatched, and why."
+      - name: audit_record
+        type: object
+        description: "Model, prompt versions, retrieved documents and guardrail decisions for the run."
+    config_schema: config/schema.json
+
+  guardrails:
+    - id: redact-before-inference
+      type: pii-redaction
+      enforcement: blocking
+      implemented_by: "plugin:pii-redactor"
+    - id: citation-required
+      type: grounding-check
+      enforcement: blocking
+      implemented_by: workflows/steps/grounding.py
+    - id: no-legal-advice-language
+      type: output-filter
+      enforcement: blocking
+      implemented_by: guardrails/no-advice.yaml
+    - id: lawyer-signoff
+      type: human-in-the-loop
+      enforcement: blocking
+      implemented_by: workflows/review.yaml#signoff
+    - id: run-cost-ceiling
+      type: cost-ceiling
+      enforcement: blocking
+      implemented_by: config/default.yaml
+
+  policies: [POL-0014, POL-0022, POL-0031]
+
+  security:
+    classification: confidential
+    risk_level: high
+    data_types: [legal-privileged, customer-pii, internal]
+    human_review: required
+    egress: [none]
+
+  operations:
+    estimated_cost:
+      unit: per-document
+      value: 0.42
+      currency: GBP
+      basis: "Median 38-page MSA, claude-sonnet-5, 2026-06 internal rate card; measured over 250 production runs."
+    estimated_latency:
+      p50_ms: 74000
+      p95_ms: 168000
+      measured_on: "2026-07-19"
+    concurrency: 8
+    support: business-hours
+
+  limitations:
+    - "English-language contracts only; the clause segmenter has not been evaluated on other languages."
+    - "Scanned documents require OCR upstream; image-only PDFs are rejected rather than silently degraded."
+    - "Does not assess governing-law or jurisdiction questions beyond flagging non-standard clauses."
+    - "Playbook coverage is 84% of positions; unmatched clauses are reported, not silently dropped."
+    - "Not evaluated for M&A, employment or real-estate agreements."
+    - "Suggested fallback wording is drafting assistance and has not been pre-approved by Legal for direct use."
+
+  roadmap:
+    - item: "German and French clause segmentation"
+      target: "2026-Q4"
+      issue: "#412"
+    - item: "Redline generation as tracked-changes DOCX"
+      target: "3.0.0"
+      issue: "#388"
+    - item: "Per-counterparty precedent memory"
+      target: "2027-Q1"
+      issue: "#455"
+
+  licensing:
+    license: ACME-Internal-1.0
+    third_party_review: true
+    attribution:
+      - "Clause taxonomy adapted from the internal Legal Ops clause dictionary v9 (internal)."
+
+  links:
+    repository: https://gitlab.acme.internal/ai-platform/harnesses/legal/contract-review
+    documentation: docs/index.md
+    issues: https://gitlab.acme.internal/ai-platform/harnesses/legal/contract-review/-/issues
+    support_channel: "#ai-legal-platform"
+    demo: https://registry.pages.acme.internal/harnesses/contract-review/#quick-start
+
+  example_skills:
+    - skill://contract-triage
+    - skill://supplier-onboarding-review
+    - skill://nda-fast-track

@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai-platform.acme.internal/schema/evaluation-report/v1.json",
+  "title": "Harness Evaluation Report",
+  "description": "Machine-readable result of one evaluation run, emitted by the harness pipeline to evaluations/results/<run_id>.json and collected by the registry indexer. Written by CI, never by hand.",
+  "type": "object",
+  "required": ["apiVersion", "kind", "harness", "version", "run", "suites", "totals"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": { "const": "harness.registry.acme.internal/v1" },
+    "kind": { "const": "EvaluationReport" },
+    "harness": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "version": { "type": "string", "description": "Harness SemVer under test." },
+    "run": {
+      "type": "object",
+      "required": ["id", "started_at", "commit", "pipeline_url", "environment"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "examples": ["2026-07-19T0312Z-98213"] },
+        "started_at": { "type": "string", "format": "date-time" },
+        "duration_s": { "type": "number", "minimum": 0 },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "pipeline_url": { "type": "string" },
+        "trigger": { "type": "string", "enum": ["merge-request", "tag", "schedule", "manual", "upstream"] },
+        "environment": {
+          "type": "object",
+          "required": ["model", "runtime"],
+          "additionalProperties": false,
+          "properties": {
+            "model": { "type": "string" },
+            "model_build": { "type": "string", "description": "Internal serving build id. Required to explain score drift that is not caused by the harness." },
+            "runtime": { "type": "string" },
+            "temperature": { "type": "number" },
+            "seed": { "type": "integer" },
+            "plugins": { "type": "array", "items": { "type": "string" }, "description": "Resolved plugin id@version pairs." }
+          }
+        }
+      }
+    },
+    "suites": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "dataset", "cases", "metrics"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": ["golden", "regression", "adversarial", "security", "guardrail", "performance", "cost", "human-review"]
+          },
+          "dataset": {
+            "type": "object",
+            "required": ["id", "version", "size", "checksum"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "version": { "type": "string" },
+              "size": { "type": "integer", "minimum": 1 },
+              "checksum": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+              "provenance": { "type": "string", "enum": ["hand-labelled", "production-sampled", "synthetic", "vendor", "mixed"] },
+              "classification": { "type": "string", "enum": ["public", "internal", "confidential", "restricted"] }
+            }
+          },
+          "cases": {
+            "type": "object",
+            "required": ["total", "passed", "failed"],
+            "additionalProperties": false,
+            "properties": {
+              "total": { "type": "integer", "minimum": 1 },
+              "passed": { "type": "integer", "minimum": 0 },
+              "failed": { "type": "integer", "minimum": 0 },
+              "skipped": { "type": "integer", "minimum": 0 },
+              "errored": { "type": "integer", "minimum": 0 }
+            }
+          },
+          "metrics": {
+            "type": "object",
+            "description": "Metric name -> measurement. Names are drawn from metrics.yaml so dashboards can compare across harnesses.",
+            "minProperties": 1,
+            "additionalProperties": {
+              "type": "object",
+              "required": ["value"],
+              "additionalProperties": false,
+              "properties": {
+                "value": { "type": "number" },
+                "unit": { "type": "string", "examples": ["ratio", "ms", "GBP", "count"] },
+                "ci95": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+                "threshold": { "type": "number", "description": "Gate value from evaluations/thresholds.yaml." },
+                "direction": { "type": "string", "enum": ["higher-is-better", "lower-is-better"] },
+                "status": { "type": "string", "enum": ["pass", "warn", "fail", "not-gated"] },
+                "judge": { "type": "string", "description": "For model-graded metrics: judge model id + rubric version. Required, so a judge change is visible as a cause of drift." }
+              }
+            }
+          },
+          "failures": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "object",
+              "required": ["case_id", "reason"],
+              "additionalProperties": false,
+              "properties": {
+                "case_id": { "type": "string" },
+                "reason": { "type": "string", "maxLength": 500 },
+                "category": { "type": "string" },
+                "artefact": { "type": "string", "description": "Path within the pipeline artefact bundle. Redacted if the dataset is confidential or restricted." }
+              }
+            }
+          }
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "required": ["pass_rate", "gated_metrics_failed"],
+      "additionalProperties": false,
+      "properties": {
+        "pass_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "coverage": { "type": "number", "minimum": 0, "maximum": 1, "description": "Share of declared interfaces, guardrails and limitations exercised by at least one case." },
+        "hallucination_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "grounding_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "p50_latency_ms": { "type": "integer" },
+        "p95_latency_ms": { "type": "integer" },
+        "cost_per_case": { "type": "number" },
+        "gated_metrics_failed": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "human_review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reviewed_at": { "type": "string", "format": "date" },
+        "reviewers": { "type": "array", "items": { "type": "string" } },
+        "sample_size": { "type": "integer" },
+        "agreement_with_automated": { "type": "number", "minimum": 0, "maximum": 1 },
+        "verdict": { "type": "string", "enum": ["accept", "accept-with-conditions", "reject"] },
+        "notes_ref": { "type": "string", "description": "Path to the signed-off review note in the harness repo." }
+      }
+    }
+  }
+}

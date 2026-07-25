@@ -1,0 +1,47 @@
+%% Contract Review Harness — happy-path run sequence
+sequenceDiagram
+    autonumber
+    participant U as Reviewing lawyer
+    participant SK as skill://contract-triage
+    participant H as contract-review harness
+    participant PP as document-parser
+    participant RD as pii-redactor
+    participant IX as legal-playbook-search
+    participant M as Model gateway
+    participant AU as Audit store
+
+    U->>SK: Upload MSA, select uk-standard
+    SK->>H: run(contract_file, playbook_id, counterparty_tier)
+    H->>PP: parse(file, emit_anchors)
+    PP-->>H: text + page/paragraph anchors
+    H->>RD: redact(text)
+    RD-->>H: redacted text (12 placeholders)
+    Note over H: Guardrail: no inference before redaction returns
+
+    H->>H: segment into 63 clauses
+    loop per clause (concurrency 8)
+        H->>M: classify(clause)
+        M-->>H: {type, confidence}
+    end
+    H->>H: route — 58 assessable, 5 low-confidence to human queue
+
+    loop per assessable clause
+        H->>IX: hybrid search(clause, playbook filter)
+        IX-->>H: top-8 positions + precedents
+        H->>M: assess(clause, positions)
+        M-->>H: finding JSON
+        H->>H: grounding check (exact quote + citation ids)
+        alt ungrounded
+            H->>M: re-assess (max 2)
+            M-->>H: finding JSON
+        end
+    end
+
+    H->>M: executive summary(findings)
+    M-->>H: summary markdown
+    H->>H: no-advice output filter
+    H->>AU: write audit record (prompts, model build, retrieved ids, guardrails)
+    H-->>SK: findings + summary + coverage_report
+    SK-->>U: Review queue item (24h SLA)
+    U->>H: sign-off: accept / reject per finding
+    H->>AU: record sign-off decision
