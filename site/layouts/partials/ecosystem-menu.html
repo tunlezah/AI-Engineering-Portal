@@ -1,0 +1,27 @@
+{{/* Header menu for the sibling systems.
+
+     A <details> rather than a scripted dropdown: the main nav is already seven
+     items wide, four more would wrap, and this has to keep working with no
+     JavaScript — the same rule the theme control and the disclaimer follow. It
+     is also the one nav that survives the mobile breakpoint, where .main-nav is
+     hidden, which is why the footer repeats the links. */}}
+{{ $eco := partial "ecosystem-links.html" . }}
+{{ with $eco }}
+<details class="ecosystem-menu">
+  <summary>Ecosystem <span class="caret" aria-hidden="true">▾</span></summary>
+  <div class="ecosystem-panel">
+    <p class="ecosystem-heading">Elsewhere on the AI platform</p>
+    <ul>
+      {{ range . }}
+      <li>
+        <a href="{{ .URL }}">
+          <span class="eco-name">{{ .Name }} <span class="ext" aria-hidden="true">↗</span></span>
+          {{ with .Params.description }}<span class="eco-desc">{{ . }}</span>{{ end }}
+        </a>
+      </li>
+      {{ end }}
+    </ul>
+    <p class="ecosystem-foot"><a href="{{ "docs/using-the-registry/" | relURL }}">How the layers fit together</a></p>
+  </div>
+</details>
+{{ end }}

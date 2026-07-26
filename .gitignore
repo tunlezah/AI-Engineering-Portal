@@ -11,6 +11,13 @@ site/data/facets.json
 site/static/catalog.json
 site/static/graph.json
 .cache/
+
+# Deployment-local configuration, kept out of the repository so a fork can
+# track upstream without carrying its own URLs and group lists in the diff.
+# See site/ecosystem.example.toml and the comments in sources.yaml.
+site/ecosystem.toml
+sources.local.yaml
+
 __pycache__/
 .pytest_cache/
 *.pyc

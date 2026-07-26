@@ -1,0 +1,65 @@
+# Where the harnesses are.
+#
+# The harnesses are not in this repository, and they do not have to be on the
+# GitLab that builds it. This file is the whole answer to "where do we read them
+# from" — instance, credential, groups, individual projects, exclusions — so a
+# team can move its harnesses without a change to the registry's code, and the
+# registry's source can live somewhere entirely separate from them.
+#
+#   registryctl crawl --sources sources.yaml        (make crawl-gitlab)
+#
+# Nothing here is read at page-render time. The crawler reads it, produces a
+# snapshot, and the published site is static.
+
+gitlab:
+  # The instance holding the harness projects. Resolution order:
+  #   --gitlab-url  >  this value  >  $REGISTRY_GITLAB_URL  >  $CI_SERVER_URL
+  # Leave it unset only when the harnesses live on the same instance as this
+  # pipeline. Set it when they do not: $CI_SERVER_URL would then be silently
+  # wrong, and a crawl of the wrong instance finds nothing rather than failing.
+  # base_url: https://gitlab.example.com
+
+  # Name of the environment variable holding a token with read_api on the
+  # harness projects. It is a variable *name* rather than a value because a
+  # separate instance needs its own credential, under whatever name the
+  # deployment already uses for it.
+  token_env: REGISTRY_READ_TOKEN
+
+  # Parallel project reads. Lower it if the instance rate-limits the token.
+  concurrency: 16
+
+# Groups walked recursively, including subgroups. Adding a group here is the
+# only registry-side configuration a new domain needs; individual projects
+# register themselves by containing a harness.yaml at their root.
+groups:
+  - ai-platform/harnesses/legal
+  - ai-platform/harnesses/support
+  - ai-platform/harnesses/finance
+  - ai-platform/harnesses/engineering
+  - ai-platform/harnesses/data
+  - ai-platform/harnesses/people
+  - ai-platform/harnesses/knowledge
+  - ai-platform/harnesses/shared
+  - ai-platform/harnesses/sandbox      # indexed, hidden from default browse
+
+# Projects named outright, for what a group walk would not reach: a project in
+# somebody else's namespace, or one project holding several harnesses.
+#
+#   projects:
+#     - some-group/one-harness            a project that is a single harness
+#     - path: platform/ai-harnesses       a project that holds many
+#       nested: true                      every directory with a harness.yaml
+#       ref: main                         optional; the default branch if unset
+#
+# `nested` is what makes a single shared harness project work, and it is
+# unavailable for groups on purpose: discovering nested harnesses costs a
+# recursive tree listing per project, which is affordable for the handful of
+# projects named here and not for every project in a crawled group.
+projects: []
+
+# Excluded regardless of a harness.yaml (templates, archived experiments).
+# Glob patterns matched against `group/project` — and against
+# `group/project/subdir` for a harness inside a nested project, so one pattern
+# can drop a whole tree.
+exclude:
+  - ai-platform/templates/harness-template

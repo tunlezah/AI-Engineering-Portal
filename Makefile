@@ -42,11 +42,16 @@ validate-fixtures: | $(BUILD) ## Validate fixtures, expecting only the known-bad
 $(BUILD):
 	@mkdir -p $(BUILD)
 
-crawl: | $(BUILD) ## Discover harnesses from the local fixture tree
-	$(PY) -m tools.registryctl crawl --harnesses examples/harnesses --out $(BUILD)/crawl
+# HARNESSES points the local crawl at any directory tree, so a clone of the
+# separate harness repository is crawled the same way the fixtures are:
+#   make index HARNESSES=/src/ai-harnesses
+HARNESSES ?= examples/harnesses
+SOURCES   ?= sources.yaml
+crawl: | $(BUILD) ## Discover harnesses from a local tree (HARNESSES=...)
+	$(PY) -m tools.registryctl crawl --harnesses $(HARNESSES) --out $(BUILD)/crawl
 
-crawl-gitlab: ## Discover harnesses from GitLab (needs REGISTRY_READ_TOKEN)
-	$(PY) -m tools.registryctl crawl --groups groups.yaml --out $(BUILD)/crawl
+crawl-gitlab: | $(BUILD) ## Discover harnesses from GitLab (SOURCES=..., needs a read token)
+	$(PY) -m tools.registryctl crawl --sources $(SOURCES) --out $(BUILD)/crawl
 
 index: crawl ## Build the snapshot: cards, graph, catalogue, index report
 	$(PY) -m tools.registryctl index --crawl $(BUILD)/crawl --out $(BUILD)/snapshot
@@ -59,9 +64,14 @@ emit: ## Turn the snapshot into Hugo content and data
 # prefix. CI passes $CI_PAGES_URL; locally the default root is what `make serve`
 # expects. `make site BASEURL=https://example/sub/` reproduces a subpath build.
 BASEURL ?=
-site: ## Build the static site (BASEURL=... for a subpath deployment)
+# CONFIG merges extra Hugo config files over hugo.toml — how a deployment
+# supplies its own ecosystem links without editing a tracked file:
+#   make site CONFIG=hugo.toml,ecosystem.toml
+CONFIG  ?=
+site: ## Build the static site (BASEURL=... for a subpath, CONFIG=... to merge configs)
 	cd $(SITE) && $(HUGO) --gc --minify --destination public \
-		$(if $(BASEURL),--baseURL "$(BASEURL)",)
+		$(if $(BASEURL),--baseURL "$(BASEURL)",) \
+		$(if $(CONFIG),--config "$(CONFIG)",)
 
 ## --- verification ---------------------------------------------------------
 
