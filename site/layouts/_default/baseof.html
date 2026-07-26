@@ -32,6 +32,7 @@ try{if(localStorage.getItem('registry-disclaimer')==='dismissed'){d.dataset.disc
         {{ end }}
       </ul>
     </nav>
+    {{ partial "ecosystem-menu.html" . }}
     <form class="header-search" action="{{ "browse/" | relURL }}" method="get" role="search">
       <label class="visually-hidden" for="q">Search harnesses</label>
       <input type="search" id="q" name="q" placeholder="Search harnesses…" autocomplete="off">
@@ -83,6 +84,15 @@ try{if(localStorage.getItem('registry-disclaimer')==='dismissed'){d.dataset.disc
         <li><a href="{{ "admin/" | relURL }}">Registry health</a></li>
       </ul>
     </nav>
+    {{/* Repeated from the header menu: below the mobile breakpoint the footer
+         is where a reader looks for a link to another system. */}}
+    {{ with partial "ecosystem-links.html" . }}
+    <nav aria-label="AI platform">
+      <ul>
+        {{ range . }}<li><a href="{{ .URL }}">{{ .Name }} <span aria-hidden="true">↗</span></a></li>{{ end }}
+      </ul>
+    </nav>
+    {{ end }}
   </div>
 </footer>
 

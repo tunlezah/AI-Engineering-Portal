@@ -1,0 +1,14 @@
+{{/* The configured ecosystem links, minus the ones that are not configured.
+
+     One place decides what "configured" means, so the header, the footer and
+     the home page can never disagree: an entry with a blank url is dropped, and
+     a deployment that links nowhere renders no ecosystem UI at all rather than
+     an empty menu.
+
+     Returns a slice of menu entries. Use `.Name`, `.URL` and
+     `.Params.description`. */}}
+{{ $out := slice }}
+{{ range .Site.Menus.ecosystem }}
+  {{ if .URL }}{{ $out = $out | append . }}{{ end }}
+{{ end }}
+{{ return $out }}

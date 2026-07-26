@@ -46,17 +46,22 @@ unit:
 
 # --------------------------------------------------------------------------
 # 1. CRAWL — discover harnesses via the GitLab API (self-hosted, on-network)
+#
+# `sources.yaml` says which instance, which groups and which projects. When the
+# harnesses live on a different GitLab from this pipeline, set gitlab.base_url
+# there (or $REGISTRY_GITLAB_URL here) and give $REGISTRY_READ_TOKEN a token for
+# *that* instance — $CI_JOB_TOKEN is scoped to this one and will not do.
 # --------------------------------------------------------------------------
 crawl:
   stage: crawl
   script:
     - |
       if [ "$MODE" = "incremental" ]; then
-        registryctl crawl --groups groups.yaml \
+        registryctl crawl --sources sources.yaml \
                           --project "$UPSTREAM_HARNESS_PROJECT" \
                           --etag-cache .cache/etags.json --out crawl/
       else
-        registryctl crawl --groups groups.yaml \
+        registryctl crawl --sources sources.yaml \
                           --etag-cache .cache/etags.json --out crawl/
       fi
   cache:

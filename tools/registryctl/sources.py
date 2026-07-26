@@ -10,6 +10,12 @@ Both yield the same `Project` record, so the indexer never knows or cares which
 one produced it. That is what makes the whole pipeline testable without a GitLab
 instance, and it is why the crawl/index split exists at all.
 
+Where those harnesses live is `SourceConfig`, read from `sources.yaml`: which
+GitLab instance, which credential, which groups, which individual projects, and
+what to ignore. Nothing in it refers to the registry's own repository — the
+harnesses are somebody else's projects, possibly on somebody else's GitLab, and
+the registry only ever reads them.
+
 A LocalSource project may carry `.registry-fixture.yaml`, which stands in for the
 facts the GitLab API would otherwise supply (pipeline status, releases, activity
 dates, issue statistics). Fixture files are development scaffolding; a real
@@ -20,7 +26,9 @@ project never has one, and the indexer treats their absence as "unknown", not
 from __future__ import annotations
 
 import dataclasses
+import fnmatch
 import json
+import os
 import pathlib
 from typing import Any, Iterable
 
@@ -95,18 +103,140 @@ class Project:
         return cls(**d)
 
 
+DEFAULT_TOKEN_ENV = "REGISTRY_READ_TOKEN"
+DEFAULT_CONCURRENCY = 16
+
+
+class ConfigError(Exception):
+    """The source configuration is unusable — say why, and stop."""
+
+
+@dataclasses.dataclass(frozen=True)
+class ProjectRef:
+    """One project named outright, rather than found by walking a group.
+
+    `nested` is the monorepo case: a single project holding many harnesses in
+    subdirectories. Group-discovered projects are never nested — walking a group
+    means one probe per project, and a recursive tree listing for every project
+    in the estate to find out it holds no harness would cost far more than it is
+    worth. Name the monorepo here instead.
+    """
+
+    path: str
+    nested: bool = False
+    ref: str | None = None
+
+
+@dataclasses.dataclass
+class SourceConfig:
+    """Where the harnesses are. Deliberately says nothing about where the
+    registry's own source lives: the two are separate by design."""
+
+    groups: list[str] = dataclasses.field(default_factory=list)
+    projects: list[ProjectRef] = dataclasses.field(default_factory=list)
+    exclude: list[str] = dataclasses.field(default_factory=list)
+    base_url: str | None = None
+    token_env: str = DEFAULT_TOKEN_ENV
+    concurrency: int = DEFAULT_CONCURRENCY
+    path: pathlib.Path | None = None
+
+    @classmethod
+    def load(cls, path: pathlib.Path | str) -> "SourceConfig":
+        path = pathlib.Path(path)
+        try:
+            raw = yaml.safe_load(path.read_text()) or {}
+        except FileNotFoundError as exc:
+            raise ConfigError(f"no source configuration at {path}") from exc
+        if not isinstance(raw, dict):
+            raise ConfigError(f"{path}: expected a mapping at the top level")
+        return cls.from_dict(raw, path=path)
+
+    @classmethod
+    def from_dict(cls, raw: dict, *, path: pathlib.Path | None = None) -> "SourceConfig":
+        gitlab = raw.get("gitlab") or {}
+        if not isinstance(gitlab, dict):
+            raise ConfigError("`gitlab:` must be a mapping")
+
+        groups = list(raw.get("groups") or [])
+        projects = [_project_ref(p) for p in (raw.get("projects") or [])]
+        if not groups and not projects:
+            raise ConfigError(
+                "no harness sources configured: set `groups:`, `projects:`, or both")
+
+        return cls(
+            groups=groups,
+            projects=projects,
+            exclude=list(raw.get("exclude") or []),
+            base_url=gitlab.get("base_url") or None,
+            token_env=gitlab.get("token_env") or DEFAULT_TOKEN_ENV,
+            concurrency=int(gitlab.get("concurrency") or DEFAULT_CONCURRENCY),
+            path=path,
+        )
+
+    # -- resolution --------------------------------------------------------
+    # Both of these fail loudly rather than falling back to a guess. Crawling
+    # the wrong instance, or crawling anonymously, produces an empty registry —
+    # and an empty registry that published successfully is the worst outcome
+    # available.
+    def resolve_base_url(self, override: str | None = None) -> str:
+        for value in (override, self.base_url,
+                      os.environ.get("REGISTRY_GITLAB_URL"),
+                      os.environ.get("CI_SERVER_URL")):
+            if value:
+                return value.rstrip("/")
+        raise ConfigError(
+            "no GitLab URL: pass --gitlab-url, set `gitlab.base_url` in "
+            f"{self.path or 'the source configuration'}, or export "
+            "REGISTRY_GITLAB_URL. CI_SERVER_URL is only the right default when "
+            "the harnesses live on the same instance as this pipeline.")
+
+    def resolve_token(self) -> str:
+        if token := os.environ.get(self.token_env):
+            return token
+        raise ConfigError(
+            f"${self.token_env} is unset. It needs read_api on the harness "
+            "projects — which may be a different GitLab instance from the one "
+            "running this pipeline, so $CI_JOB_TOKEN is usually not enough.")
+
+    # -- filtering ---------------------------------------------------------
+    def excluded(self, path: str) -> bool:
+        """Glob-matched against `group/project`, and against `group/project/subdir`
+        for a harness inside a monorepo — so one pattern can drop a whole tree."""
+        return any(fnmatch.fnmatch(path, pattern) for pattern in self.exclude)
+
+
+def _project_ref(entry: Any) -> ProjectRef:
+    if isinstance(entry, str):
+        return ProjectRef(path=entry)
+    if isinstance(entry, dict):
+        if not (path := entry.get("path")):
+            raise ConfigError(f"project entry has no `path`: {entry!r}")
+        return ProjectRef(path=path, nested=bool(entry.get("nested", False)),
+                          ref=entry.get("ref") or None)
+    raise ConfigError(f"project entry must be a string or a mapping: {entry!r}")
+
+
 class LocalSource:
     """Discovers harnesses in a directory tree: any dir containing harness.yaml."""
 
-    def __init__(self, root: pathlib.Path, namespace: str = "ai-platform/harnesses"):
+    def __init__(self, root: pathlib.Path, namespace: str = "ai-platform/harnesses",
+                 exclude: list[str] | None = None):
         self.root = pathlib.Path(root)
         self.namespace = namespace
+        # A local root is often a clone of the separate harness repository, so
+        # the same exclude patterns that apply to a crawl apply here too.
+        self.exclude = list(exclude or [])
 
     def discover(self) -> Iterable[Project]:
         for manifest in sorted(self.root.glob("**/harness.yaml")):
             # Skip manifests nested inside another harness (e.g. test fixtures).
             if any(p.joinpath(MANIFEST).exists() for p in manifest.parents[1:]
                    if self.root in p.parents or p == self.root):
+                continue
+            rel = manifest.parent.relative_to(self.root).as_posix()
+            if any(fnmatch.fnmatch(rel, pattern) or
+                   fnmatch.fnmatch(f"{self.namespace}/{rel}", pattern)
+                   for pattern in self.exclude):
                 continue
             yield self._read(manifest.parent)
 

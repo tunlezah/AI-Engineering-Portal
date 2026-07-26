@@ -93,5 +93,53 @@ disableKinds = ["rss"]
     url = "/admin/"
     weight = 70
 
+# --------------------------------------------------------------------------
+# Ecosystem — the sibling systems this registry sits between. They are separate
+# products with separate URLs, so they are configuration, not content.
+#
+# Rules the templates enforce:
+#   * an entry with a blank `url` is not rendered. An organisation that has no
+#     AI Gallery blanks the url and gets no link, rather than a dead one;
+#   * order is `weight`; the description is shown in the header menu and on the
+#     home page, so keep it to one short sentence.
+#
+# To change these without editing this file — the usual case for a deployment
+# that tracks upstream — put the replacement `[[menus.ecosystem]]` block in its
+# own file and merge it at build time:
+#
+#   hugo --config hugo.toml,ecosystem.toml        (make site CONFIG=hugo.toml,ecosystem.toml)
+#
+# `ecosystem.example.toml` is a ready-made starting point. Config merging
+# replaces the whole array, so the override file must list every link you want.
+# --------------------------------------------------------------------------
+  [[menus.ecosystem]]
+    identifier = "plugin-marketplace"
+    name = "Plugin Marketplace"
+    url = "https://plugins.acme.internal/"
+    weight = 10
+    [menus.ecosystem.params]
+      description = "Tools and connectors. A harness declares the ones it calls."
+  [[menus.ecosystem]]
+    identifier = "skills-marketplace"
+    name = "Skills Marketplace"
+    url = "https://skills.acme.internal/"
+    weight = 20
+    [menus.ecosystem.params]
+      description = "Business capabilities. Each one is built on a harness."
+  [[menus.ecosystem]]
+    identifier = "prompt-library"
+    name = "Prompt Library"
+    url = "https://prompts.acme.internal/"
+    weight = 30
+    [menus.ecosystem.params]
+      description = "Reusable instructions, to copy and adapt."
+  [[menus.ecosystem]]
+    identifier = "ai-gallery"
+    name = "AI Gallery"
+    url = "https://gallery.acme.internal/"
+    weight = 40
+    [menus.ecosystem.params]
+      description = "What teams have shipped, demonstrated end to end."
+
 [security.exec]
   allow = []

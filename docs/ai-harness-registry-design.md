@@ -700,7 +700,47 @@ supports (`--groups` takes a subset).
 - *Per-project isolation*: one malformed manifest degrades one card (rendered
   with an error banner and an auto-filed issue), never the build.
 
-### 5.3 What the indexer produces
+### 5.3 Where the harnesses live (and why it is not here)
+
+Discovery says *how* a harness is found. This says *where the registry looks*,
+and the answer is deliberately never "this repository". The harnesses belong to
+the teams that write them; the registry is a reader. `sources.yaml` is the entire
+coupling between the two, and it is configuration rather than code so that moving
+harnesses does not mean changing the registry:
+
+| Setting | What it separates |
+|---|---|
+| `gitlab.base_url` | **The instance.** The harnesses may be on a different GitLab from the one running this pipeline. `$CI_SERVER_URL` is only a fallback, and a wrong one when the two differ — so when nothing resolves, the crawler errors instead of guessing. |
+| `gitlab.token_env` | **The credential.** A separate instance needs its own read token, under whatever variable name the deployment already uses. `$CI_JOB_TOKEN` is scoped to the pipeline's own instance and is not sufficient. |
+| `groups` | **The namespaces**, walked recursively. One project per harness — the common shape. |
+| `projects` | **Individual projects**, for what a group walk does not reach: another team's namespace, or one project holding several harnesses. |
+| `exclude` | Globs over `group/project` (and `group/project/subdir`), so templates and scratch trees never reach the index. |
+
+**The monorepo case.** `projects: [{path: …, nested: true}]` applies D2 to every
+directory in a project rather than to its root, so a single shared project
+containing twenty harnesses indexes as twenty harnesses. Two consequences are
+worth stating rather than discovering:
+
+- *It is opt-in per project, and unavailable for groups.* Finding nested
+  harnesses costs a recursive tree listing; doing that for every project in a
+  crawled group to learn that most of them are not harnesses would dominate the
+  crawl budget described above. Naming the monorepo costs one line.
+- *Pipeline status, releases and issue statistics are project-wide*, so every
+  harness in a monorepo shares them and scores as one engineering unit. That is
+  accurate — they really do share a pipeline — but it is a reason to prefer a
+  project per harness where the team can afford one. Evaluation reports are the
+  exception: each harness takes only the reports under its own directory, because
+  attributing a shared artefact to all of them would manufacture evidence.
+
+Whichever shape a project has, the crawler produces the same `Project` record
+with paths relative to the harness, so nothing downstream — validation, scoring,
+the graph, the site — can tell the difference.
+
+**Air-gapped variant.** `--harnesses-root` reads the same configuration against a
+local checkout instead of the API, for a runner that clones the harness
+repository and has no route to a GitLab at build time.
+
+### 5.4 What the indexer produces
 
 The snapshot is committed to a protected `snapshot` branch by a bot:
 
@@ -722,7 +762,7 @@ cost is a repository that grows; at 5,000 harnesses × ~8 KB × a few changes a 
 this is a few hundred MB a year, and we shallow-prune the branch annually into an
 archive project.
 
-### 5.4 Deletion, rename and archive semantics
+### 5.5 Deletion, rename and archive semantics
 
 | Event | Detection | Behaviour |
 |---|---|---|
@@ -2594,8 +2634,8 @@ looked fine.
 
 | ID | Decision | Section |
 |---|---|---|
-| D1 | Git is the database; no runtime service | §1, §5.3, §23.3 |
-| D2 | Existence-based discovery via root `harness.yaml` | §5.2 |
+| D1 | Git is the database; no runtime service | §1, §5.4, §23.3 |
+| D2 | Existence-based discovery via root `harness.yaml` | §5.2, §5.3 |
 | D3 | Declared `spec` vs computed `status` | §3.1 |
 | D4 | Crawl for truth, push for latency | §5.2 |
 | D5 | Hugo + Pagefind + generated catalog | §6.3, §7 |

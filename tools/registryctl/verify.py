@@ -105,9 +105,16 @@ ATTR_RE = re.compile(
     r"""\b(src|href|poster|data|data-catalog)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<>`]+))""", re.I)
 CSS_URL_RE = re.compile(r"""url\(\s*(?:"([^"]*)"|'([^']*)'|([^)"']*))\)""", re.I)
 LOCAL_SCHEMES = ("mailto:", "tel:", "data:", "#", "javascript:", "blob:", "about:")
-# Links into GitLab are legitimate: the registry indexes repositories it cannot
-# host. They are not fetched at page load, so they do not break offline use.
-ALLOWED_EXTERNAL_HOSTS = ("gitlab.acme.internal", "registry.pages.acme.internal")
+# Links *out* to first-party systems are legitimate: the registry indexes
+# repositories it cannot host, and its header links to the sibling marketplaces.
+# None of them is fetched at page load, so none of them breaks offline use.
+# A host on this list is silent; any other external link is reported as a
+# warning, never blocked. A deployment passes its own hosts with --allow-host
+# (repeatable) — the default is the fictional domain this repository uses
+# throughout, so a real one should override it rather than inherit it.
+# Matching is on the whole host or a dot-suffix, so "acme.internal" covers
+# gitlab.acme.internal and plugins.acme.internal but not evil-acme.internal.
+ALLOWED_EXTERNAL_HOSTS = ("acme.internal",)
 INLINE_HANDLER_RE = re.compile(r"<[a-z][^>]*?\s(on[a-z]{3,20})\s*=", re.I)
 JS_URL_RE = re.compile(r"""(?:src|href)\s*=\s*["']?\s*javascript:""", re.I)
 

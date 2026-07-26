@@ -1,7 +1,8 @@
 """registryctl — the registry's command line.
 
     registryctl validate <dir>          validate one harness (what a contributor runs)
-    registryctl crawl                   discover harnesses (local dir or GitLab groups)
+    registryctl crawl                   discover harnesses (local dir, or the GitLab
+                                        groups and projects named in sources.yaml)
     registryctl index                   crawl output -> snapshot
     registryctl emit-content            snapshot -> Hugo content and data
     registryctl verify-snapshot         integrity + mass-change guard
@@ -25,9 +26,11 @@ import yaml
 from . import content as content_mod
 from . import index as index_mod
 from .index import Governance, write_snapshot
-from .sources import LocalSource, SnapshotSource, read_local_project, write_crawl
+from .sources import (ConfigError, LocalSource, SnapshotSource, SourceConfig,
+                      read_local_project, write_crawl)
 from .validate import ReferenceData, validate_manifest
-from .verify import check_accessibility, verify_site, verify_snapshot
+from .verify import (ALLOWED_EXTERNAL_HOSTS, check_accessibility, verify_site,
+                     verify_snapshot)
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 DEFAULTS = {
@@ -79,18 +82,36 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
 
 def cmd_crawl(args: argparse.Namespace) -> int:
+    """Discover harnesses — wherever they live.
+
+    Three ways in, all pointing away from this repository: a GitLab instance
+    named in the source configuration, a local directory tree (fixtures, or a
+    clone of the harness repository on an air-gapped runner), and the fixtures
+    shipped here for development.
+    """
     out = pathlib.Path(args.out)
-    if args.groups:
+    if args.sources:
         from .crawl import GitLabSource
 
-        groups = yaml.safe_load(pathlib.Path(args.groups).read_text())["groups"]
-        source = GitLabSource(groups, etag_cache=pathlib.Path(args.etag_cache)
+        config = SourceConfig.load(args.sources)
+        if args.harnesses_root:
+            # Same configuration, no API: crawl a checkout of the harness
+            # projects instead of the instance that hosts them.
+            projects = list(LocalSource(pathlib.Path(args.harnesses_root),
+                                        exclude=config.exclude).discover())
+            n = write_crawl(projects, out)
+            print(f"crawled {n} harness(es) from {args.harnesses_root} "
+                  f"(source config {args.sources})")
+            return 0
+
+        source = GitLabSource(config, base_url=args.gitlab_url,
+                              etag_cache=pathlib.Path(args.etag_cache)
                               if args.etag_cache else None)
-        projects = ([source.discover_one(args.project)] if args.project else source.discover())
-        projects = [p for p in projects if p]
+        projects = (source.discover_one(args.project) if args.project
+                    else source.discover())
         n = write_crawl(projects, out)
-        print(f"crawled {n} harness(es) from {source.scanned} project(s), "
-              f"{source.errors} error(s)")
+        print(f"crawled {n} harness(es) from {source.scanned} project(s) on "
+              f"{source.client.api}, {source.skipped} excluded, {source.errors} error(s)")
         if not source.healthy():
             print("crawl error rate above 2% — refusing to publish", file=sys.stderr)
             return 1
@@ -137,7 +158,9 @@ def cmd_verify_snapshot(args: argparse.Namespace) -> int:
 
 def cmd_verify_site(args: argparse.Namespace) -> int:
     site = verify_site(pathlib.Path(args.public), max_page_kb=args.max_page_kb,
-                       max_catalog_mb=args.max_catalog_mb, base_path=args.base_path)
+                       max_catalog_mb=args.max_catalog_mb, base_path=args.base_path,
+                       allow_hosts=tuple(args.allow_host) if args.allow_host
+                       else ALLOWED_EXTERNAL_HOSTS)
     a11y = check_accessibility(pathlib.Path(args.public), sample=args.a11y_sample)
     print("site verification:")
     print(site.report())
@@ -173,6 +196,28 @@ def cmd_report(args: argparse.Namespace) -> int:
 
 
 # --------------------------------------------------------------------------
+def _crawl_args(p: argparse.ArgumentParser) -> None:
+    """Where the harnesses come from. Shared by `crawl` and `build`.
+
+    The registry's own repository is never one of the answers: harnesses live in
+    other projects, and possibly on another GitLab entirely.
+    """
+    p.add_argument("--harnesses", default=str(DEFAULTS["harnesses"]),
+                   help="local directory tree of harnesses (development / CI fixtures)")
+    p.add_argument("--sources", default=None, metavar="FILE",
+                   help="sources.yaml: the GitLab instance, groups and projects to "
+                        "crawl. Using it switches from --harnesses to the API.")
+    p.add_argument("--groups", dest="sources", metavar="FILE",
+                   help="deprecated alias for --sources")
+    p.add_argument("--gitlab-url", default=None, metavar="URL",
+                   help="override gitlab.base_url from the source configuration")
+    p.add_argument("--harnesses-root", default=None, metavar="DIR",
+                   help="read the configured sources from a local checkout instead "
+                        "of the API — for air-gapped runners that clone first")
+    p.add_argument("--project", help="incremental: crawl a single project path")
+    p.add_argument("--etag-cache", default=".cache/etags.json")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="registryctl", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -187,11 +232,7 @@ def build_parser() -> argparse.ArgumentParser:
     v.set_defaults(func=cmd_validate)
 
     c = sub.add_parser("crawl", help="discover harnesses")
-    c.add_argument("--harnesses", default=str(DEFAULTS["harnesses"]),
-                   help="local directory tree (development / CI fixtures)")
-    c.add_argument("--groups", help="groups.yaml — use the GitLab API instead of a directory")
-    c.add_argument("--project", help="incremental: crawl a single project path")
-    c.add_argument("--etag-cache", default=".cache/etags.json")
+    _crawl_args(c)
     c.add_argument("--out", default=str(DEFAULTS["crawl"]))
     c.set_defaults(func=cmd_crawl)
 
@@ -217,6 +258,10 @@ def build_parser() -> argparse.ArgumentParser:
     vt.add_argument("--max-page-kb", type=int, default=400)
     vt.add_argument("--max-catalog-mb", type=float, default=6.0)
     vt.add_argument("--a11y-sample", type=int, default=40)
+    vt.add_argument("--allow-host", action="append", metavar="HOST",
+                    help="host that may appear in a link out of the site without a "
+                         "warning; repeatable. Matches the host or a dot-suffix of "
+                         f"it. Default: {', '.join(ALLOWED_EXTERNAL_HOSTS)}")
     vt.add_argument("--base-path", default=None,
                     help="URL prefix the site is served under (GitLab Pages project "
                          "sites live at /<project>/). Auto-detected when omitted; "
@@ -224,10 +269,7 @@ def build_parser() -> argparse.ArgumentParser:
     vt.set_defaults(func=cmd_verify_site)
 
     b = sub.add_parser("build", help="crawl + index + emit (development loop)")
-    b.add_argument("--harnesses", default=str(DEFAULTS["harnesses"]))
-    b.add_argument("--groups")
-    b.add_argument("--project")
-    b.add_argument("--etag-cache", default=".cache/etags.json")
+    _crawl_args(b)
     b.add_argument("--out", default=str(DEFAULTS["crawl"]))
     b.add_argument("--crawl", default=str(DEFAULTS["crawl"]))
     b.add_argument("--governance", default=str(DEFAULTS["governance"]))
@@ -244,7 +286,13 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except ConfigError as exc:
+        # Misconfiguration is an operator error, not a bug. A traceback here
+        # buries the one line that says which setting is missing.
+        print(f"configuration error: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

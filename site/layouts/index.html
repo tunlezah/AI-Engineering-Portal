@@ -87,4 +87,24 @@
   </div>
   <p class="muted">A skill is built on exactly one harness; many skills may share one. That sharing is the point.</p>
 </section>
+
+{{/* The links themselves are configuration (menus.ecosystem in hugo.toml), so
+     an organisation whose systems live at different URLs — or which has only
+     two of them — changes the config, not this template. */}}
+{{ with partial "ecosystem-links.html" . }}
+<section class="ecosystem-strip" aria-labelledby="ecosystem-heading">
+  <h2 id="ecosystem-heading">Across the AI platform</h2>
+  <p class="muted">This registry is one layer. The rest of the estate lives here.</p>
+  <ul class="eco-cards">
+    {{ range . }}
+    <li>
+      <a href="{{ .URL }}">
+        <strong>{{ .Name }} <span class="ext" aria-hidden="true">↗</span></strong>
+        {{ with .Params.description }}<span class="muted">{{ . }}</span>{{ end }}
+      </a>
+    </li>
+    {{ end }}
+  </ul>
+</section>
+{{ end }}
 {{ end }}

@@ -15,7 +15,8 @@ network.
 ```shell
 make all        # validate → crawl → index → emit → build → verify
 make serve      # browse it at http://localhost:1313
-make test       # 115 tests: scoring, lifecycle gates, validation, pipeline, security
+make test       # 150 tests: scoring, lifecycle gates, validation, pipeline,
+                #            sources, security
 ```
 
 Requires Python 3.11 (`pyyaml`, `jsonschema`) and Hugo **extended** ≥ 0.148.
@@ -61,7 +62,83 @@ images and the Python dependencies. Override four variables in
 `ci/registry-ci.yml` is the *production* pipeline for an organisation that has
 real harness projects to crawl — incremental triggers, an hourly reconciliation
 crawl, and a committed snapshot branch. Against a real instance, swap the source
-with `make crawl-gitlab` (`REGISTRY_READ_TOKEN` + `groups.yaml`).
+with `make crawl-gitlab` (see below).
+
+## Where the harnesses come from
+
+**The harnesses do not live in this repository, and they do not have to live on
+the GitLab that builds it.** `sources.yaml` is the entire coupling between the
+registry and the estate it indexes, so teams keep their harnesses wherever they
+already work and this project stays just the thing that reads them.
+
+```yaml
+gitlab:
+  base_url: https://gitlab.other-instance.example   # a different GitLab entirely
+  token_env: HARNESS_INSTANCE_TOKEN                 # with its own read token
+groups:
+  - platform/harnesses                              # walked recursively
+projects:
+  - path: some-team/ai-harnesses                    # one project, many harnesses
+    nested: true
+  - other-org/contract-review                       # one project, one harness
+exclude:
+  - "*/templates/*"
+```
+
+```shell
+make crawl-gitlab                        # uses sources.yaml
+make crawl-gitlab SOURCES=ours.yaml      # or any other file
+registryctl crawl --sources sources.yaml --gitlab-url https://gitlab.example
+```
+
+| Setting | What it decides | Default |
+|---|---|---|
+| `gitlab.base_url` | Which instance holds the harnesses | `--gitlab-url`, then this, then `$REGISTRY_GITLAB_URL`, then `$CI_SERVER_URL` |
+| `gitlab.token_env` | Which variable holds a token with `read_api` **on that instance** | `REGISTRY_READ_TOKEN` |
+| `groups` | Namespaces walked recursively; one project per harness | — |
+| `projects` | Projects named outright, `nested: true` for one project holding many | — |
+| `exclude` | Globs over `group/project`, and `group/project/subdir` when nested | — |
+
+Two things are worth knowing before you point it at a second instance. There is
+no fallback if the URL or the token cannot be resolved: crawling the wrong
+instance, or anonymously, yields an empty registry that publishes successfully,
+which is the worst outcome available — so the crawl fails with a message naming
+the missing setting. And `$CI_JOB_TOKEN` is scoped to the pipeline's own
+instance; a separate one needs a real token in the variable `token_env` names.
+
+In a **monorepo** (`nested: true`), pipeline status, releases and issue
+statistics are project-wide, so every harness in it shares them and scores as one
+engineering unit. Evaluation reports are the exception — each harness takes only
+the reports under its own directory, because attributing a shared artefact to all
+of them would manufacture evidence. Otherwise a nested harness and one that owns
+its whole project produce identical records: paths are relative to the harness,
+and nothing downstream can tell them apart.
+
+For a runner with no route to the instance, `--harnesses-root DIR` applies the
+same configuration to a local checkout, and `make index HARNESSES=/src/harnesses`
+crawls any directory tree the same way it crawls the fixtures here.
+
+## Linking out to the rest of the platform
+
+The header carries an **Ecosystem** menu — Plugin Marketplace, Skills
+Marketplace, Prompt Library, AI Gallery — repeated in the footer and on the home
+page. They are separate products with their own URLs, so they are configuration:
+`[[menus.ecosystem]]` in [`site/hugo.toml`](site/hugo.toml).
+
+```shell
+cp site/ecosystem.example.toml site/ecosystem.toml   # git-ignored
+make site CONFIG=hugo.toml,ecosystem.toml
+```
+
+Blank an entry's `url` and it disappears everywhere — an organisation without an
+AI Gallery gets no link rather than a dead one. Adding a fifth system is another
+block in the config; no template changes. Hugo replaces arrays when merging
+configs rather than appending, so an override file lists every link you want.
+
+The links point out of the site and are never fetched to render a page, so they
+do not affect the offline guarantee. `verify-site` reports a link to an unlisted
+host as a warning; `--allow-host` (repeatable) is how a deployment declares its
+own first-party domains.
 
 ## What offline actually means here
 
@@ -178,6 +255,7 @@ is.
 | Path | What it is |
 |---|---|
 | `.gitlab-ci.yml` | The pipeline that builds and publishes this repository to GitLab Pages |
+| `sources.yaml` | **Where the harnesses are**: instance, credential, groups, projects, exclusions |
 | `docs/ai-harness-registry-design.md` | The design document |
 | `schema/harness.schema.json` | Harness manifest schema (JSON Schema 2020-12) |
 | `schema/evaluation-report.schema.json` | Machine-readable evaluation report schema |
@@ -187,8 +265,8 @@ is.
 | `ci/registry-ci.yml` | Production registry pipeline: crawl → index → verify → build → deploy |
 | `tools/registryctl/` | **The implementation**: sources, validation, observation, scoring, indexing, content emission, verification, CLI |
 | `tools/dev/` | Fixture generators (evaluation histories, blueprint pages) |
-| `site/` | The Hugo site: templates, hand-written CSS, vendored JS, faceted search, theming, disclaimer |
-| `tests/` | Scoring, lifecycle gating, validation rules, end-to-end pipeline, security regressions |
+| `site/` | The Hugo site: templates, hand-written CSS, vendored JS, faceted search, theming, disclaimer, configurable ecosystem links |
+| `tests/` | Scoring, lifecycle gating, validation rules, end-to-end pipeline, source configuration and discovery, security regressions |
 | `examples/harnesses/` | Nine worked harnesses, including a certified one, a deliberately invalid one, and two that get auto-downgraded |
 | `governance/` | Approval and certification records — held outside the harness repos on purpose |
 | `vendor/` | Sibling registry exports, platform catalogues, vendored browser assets |
