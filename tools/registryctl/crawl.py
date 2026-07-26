@@ -8,9 +8,13 @@ Design rules enforced here:
     projects costs a few thousand 304s rather than a few thousand blob reads.
   * A project is a harness if, and only if, `harness.yaml` exists at the root of
     its default branch. There is no registration list to fall out of date.
-  * A harness is publishable only if its latest default-branch pipeline ran the
-    shared validation job successfully. Producers cannot opt out of the gate by
-    deleting jobs from their own .gitlab-ci.yml.
+  * Whether the latest default-branch pipeline ran the shared validation job
+    successfully is recorded per project and feeds scoring. It is deliberately
+    *not* a publication gate: a harness that fails validation is still indexed
+    and rendered as an error card, because hiding broken harnesses would make
+    the estate look healthier than it is. Treat `validation_ok` as evidence,
+    not as a security control — it is satisfied by a job of the right name in
+    the producer's own pipeline, which the producer controls.
   * One broken project degrades one card. A crawl that errors on more than 2% of
     projects refuses to publish at all — a bad token must not silently empty the
     registry.
@@ -231,16 +235,35 @@ class GitLabSource:
         return sorted(out, key=lambda e: e.get("run", {}).get("started_at", ""))
 
 
+# A job artefact is produced by a pipeline in someone else's project, so its
+# *decompressed* size is attacker-chosen even when the download is small. These
+# caps keep a zip bomb from taking the crawler down with it.
+MAX_REPORT_BYTES = 4 * 1024 * 1024
+MAX_ARTEFACT_BYTES = 64 * 1024 * 1024
+
+
 def _reports_from_zip(blob: bytes) -> list[dict]:
     import io
     import zipfile
 
-    out = []
+    out: list[dict] = []
+    budget = MAX_ARTEFACT_BYTES
     with zipfile.ZipFile(io.BytesIO(blob)) as z:
-        for name in z.namelist():
-            if name.startswith("evaluations/results/") and name.endswith(".json"):
-                try:
-                    out.append(json.loads(z.read(name)))
-                except json.JSONDecodeError:
-                    continue
+        for info in z.infolist():
+            name = info.filename
+            if not (name.startswith("evaluations/results/") and name.endswith(".json")):
+                continue
+            if info.file_size > MAX_REPORT_BYTES:
+                print(f"skipping oversized evaluation report {name} "
+                      f"({info.file_size} bytes)", file=sys.stderr)
+                continue
+            budget -= info.file_size
+            if budget < 0:
+                print("evaluation artefact exceeds the decompression budget; "
+                      "ignoring the rest", file=sys.stderr)
+                break
+            try:
+                out.append(json.loads(z.read(name)))
+            except json.JSONDecodeError:
+                continue
     return out

@@ -23,7 +23,7 @@ from typing import Any
 import yaml
 
 from . import charts
-from .index import build_catalog, build_graph, index_report, neighbourhood
+from .index import build_catalog, build_graph, index_report, neighbourhood, safe_child
 from .observe import now
 
 LIFECYCLE_ORDER = ["certified", "org-ready", "team-ready", "prototype", "experimental",
@@ -70,9 +70,17 @@ def emit(snapshot: pathlib.Path, site: pathlib.Path, taxonomy: dict) -> dict:
 
     for card in cards:
         enriched = enrich(card, graph)
+        # Both of these are filesystem paths and URL segments derived from
+        # registry data; safe_child refuses anything that escapes the directory.
         hid = card["spec"]["metadata"]["id"]
-        (data / "cards" / f"{hid}.json").write_text(json.dumps(enriched, indent=2, sort_keys=True))
-        (content / f"{hid}.md").write_text(page(enriched))
+        # Render the page first: the README *is* the page body. Dropping it from
+        # the card before rendering left every harness page with front matter and
+        # nothing under it.
+        markdown = page(enriched)
+        enriched["status"].get("content", {}).pop("readme", None)  # not in the data file too
+        safe_child(data / "cards", f"{hid}.json").write_text(
+            json.dumps(enriched, indent=2, sort_keys=True))
+        safe_child(content, f"{hid}.md").write_text(markdown)
 
     stats = estate_stats(cards, report, taxonomy)
     (data / "registry.json").write_text(json.dumps(stats, indent=2, sort_keys=True))
@@ -122,8 +130,6 @@ def enrich(card: dict, graph: dict) -> dict:
         st["content"]["changelog"] = _rewrite_repo_links(
             st["content"]["changelog"], src["web_url"], src.get("default_branch", "main"))
 
-    # The README is rendered as the page body; keep it out of the data file too.
-    st.get("content", {}).pop("readme", None)
     return card
 
 
@@ -213,6 +219,23 @@ def banners(card: dict) -> list[dict]:
     return out
 
 
+def _mermaid_label(text: Any) -> str:
+    """Escape a node label for interpolation inside a Mermaid quoted string.
+
+    Labels are harness names and plugin ids — repository-controlled text. A
+    quote or a newline in one would break out of the label and corrupt the
+    diagram source. Mermaid's own entity escapes are used so the label still
+    reads correctly; `#` is escaped first so it cannot forge the others.
+    """
+    return (str(text)
+            .replace("#", "#35;")
+            .replace('"', "#quot;")
+            .replace("<", "#lt;")
+            .replace(">", "#gt;")
+            .replace("\r", " ")
+            .replace("\n", " ")[:120])
+
+
 def mermaid_neighbourhood(card: dict, graph: dict) -> str:
     """One-hop graph as Mermaid text, generated — never hand-drawn, never stale."""
     nb = neighbourhood(card, graph)
@@ -235,10 +258,10 @@ def mermaid_neighbourhood(card: dict, graph: dict) -> str:
         }.get(n.get("type", ""), ("[", "]"))
         extra = ""
         if n.get("type") == "harness" and n.get("lifecycle"):
-            extra = f"<br/><small>{n['lifecycle']}</small>"
-        lines.append(f'    {nid(n["key"])}{shape[0]}"{label}{extra}"{shape[1]}')
+            extra = f"<br/><small>{_mermaid_label(n['lifecycle'])}</small>"
+        lines.append(f'    {nid(n["key"])}{shape[0]}"{_mermaid_label(label)}{extra}"{shape[1]}')
     for e in nb["edges"]:
-        label = e["type"].replace("-", " ")
+        label = _mermaid_label(e["type"].replace("-", " "))
         lines.append(f'    {nid(e["from"])} -->|{label}| {nid(e["to"])}')
     lines.append(f'    class {nid(f"harness:{hid}")} centre;')
     lines.append("    classDef centre fill:#eef2ff,stroke:#4338ca,stroke-width:2px;")
@@ -306,12 +329,26 @@ def _readme_body(card: dict) -> str:
     if src.get("web_url"):
         readme = _rewrite_repo_links(readme, src["web_url"],
                                      src.get("default_branch", "main"))
-    lines = readme.splitlines()
-    out, skipped_h1 = [], False
-    for line in lines:
-        if not skipped_h1 and line.startswith("# "):
+    # The page renders all of this above the body already: the title, the
+    # identity table, and the "Overview" heading the body sits inside. Repeating
+    # them opened every harness page with two Overview headings and a table of
+    # facts the header had just shown. Only the *leading* copies are dropped —
+    # a table further down is the author's content.
+    out: list[str] = []
+    skipped_h1 = False
+    seen_section = False
+    for line in readme.splitlines():
+        stripped = line.strip()
+        if not skipped_h1 and stripped.startswith("# "):
             skipped_h1 = True
             continue
+        if not seen_section:
+            if stripped.startswith("##"):
+                seen_section = True
+                if stripped.lower().lstrip("#").strip() == "overview":
+                    continue
+            elif stripped.startswith("|"):
+                continue        # the identity table
         out.append(line)
     return "\n".join(out).strip() + "\n"
 

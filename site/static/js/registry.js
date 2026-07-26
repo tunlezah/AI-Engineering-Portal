@@ -224,21 +224,24 @@
         'or <a href="' + base() + 'docs/contributing/">propose a new harness</a>.</p></li>';
       return;
     }
+    // Every interpolated value is escaped, including the ones that "cannot" be
+    // hostile: an invalid manifest puts its raw id straight into the catalogue,
+    // so the id is exactly the field least safe to trust here.
     list.innerHTML = rows.slice(0, 200).map(function (h) {
       return '<li class="hcard">' +
         '<div class="hcard-head">' +
-          '<a class="hcard-title" href="' + base() + 'harnesses/' + h.id + '/">' + esc(h.name) + '</a>' +
-          '<span class="badge lc lc-' + h.lifecycle + '">' + h.lifecycle + '</span>' +
+          '<a class="hcard-title" href="' + esc(base() + "harnesses/" + encodeURIComponent(h.id) + "/") + '">' + esc(h.name) + '</a>' +
+          '<span class="badge lc lc-' + esc(h.lifecycle) + '">' + esc(h.lifecycle) + '</span>' +
         '</div>' +
         '<p class="hcard-summary">' + esc(h.summary) + '</p>' +
         '<p class="hcard-meta">' +
-          '<span>Q ' + h.quality + '</span>' +
+          '<span>Q ' + esc(h.quality) + '</span>' +
           (h.pass_rate != null ? '<span>pass ' + Math.round(h.pass_rate * 100) + '%</span>' : '<span class="muted">no evaluation</span>') +
-          '<span>' + h.consumers + ' consumer' + (h.consumers === 1 ? '' : 's') + '</span>' +
+          '<span>' + esc(h.consumers) + ' consumer' + (h.consumers === 1 ? '' : 's') + '</span>' +
           '<span>' + esc(h.team) + '</span>' +
           '<span>' + esc(h.pattern) + '</span>' +
-          (h.updated ? '<span>updated ' + h.updated + '</span>' : '') +
-          (h.warnings ? '<span class="bad">' + h.warnings + ' warning' + (h.warnings === 1 ? '' : 's') + '</span>' : '') +
+          (h.updated ? '<span>updated ' + esc(h.updated) + '</span>' : '') +
+          (h.warnings ? '<span class="bad">' + esc(h.warnings) + ' warning' + (h.warnings === 1 ? '' : 's') + '</span>' : '') +
         '</p></li>';
     }).join("");
     if (rows.length > 200) {
@@ -303,6 +306,10 @@
   }
 
   // ---------- events ----------
+  // Filtering is live, so submitting the form would only reload the page.
+  var form = el.querySelector("[data-no-submit]");
+  if (form) form.addEventListener("submit", function (e) { e.preventDefault(); });
+
   var input = document.getElementById("browse-q");
   input.addEventListener("input", debounce(function () { state.q = input.value; render(); }, 160));
   document.getElementById("sort").addEventListener("change", function (e) {

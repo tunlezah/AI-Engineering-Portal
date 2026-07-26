@@ -54,8 +54,14 @@ index: crawl ## Build the snapshot: cards, graph, catalogue, index report
 emit: ## Turn the snapshot into Hugo content and data
 	$(PY) -m tools.registryctl emit-content --snapshot $(BUILD)/snapshot --site $(SITE)
 
-site: ## Build the static site
-	cd $(SITE) && $(HUGO) --gc --minify --destination public
+# BASEURL matters on GitLab Pages: a *project* site is served from
+# https://<group>.gitlab.io/<project>/, and every asset URL has to carry that
+# prefix. CI passes $CI_PAGES_URL; locally the default root is what `make serve`
+# expects. `make site BASEURL=https://example/sub/` reproduces a subpath build.
+BASEURL ?=
+site: ## Build the static site (BASEURL=... for a subpath deployment)
+	cd $(SITE) && $(HUGO) --gc --minify --destination public \
+		$(if $(BASEURL),--baseURL "$(BASEURL)",)
 
 ## --- verification ---------------------------------------------------------
 
@@ -67,10 +73,13 @@ verify-snapshot: ## Referential integrity, cycles, mass-change guard
 verify-site: ## Offline safety, links, page budgets, accessibility
 	$(PY) -m tools.registryctl verify-site --public $(PUBLIC)
 
+# One implementation of the offline rule, not two. A grep over the HTML cannot
+# see minified (unquoted) attributes or CSS url(), so it passed vacuously; the
+# verifier parses both and is what CI already runs.
 check-offline: ## Fail if anything in the built site reaches outside the network
-	@! grep -rlE 'src="https?://(?!gitlab\.acme\.internal)' $(PUBLIC) --include='*.html' \
-		|| (echo "external asset reference found" && exit 1)
-	@echo "no external assets"
+	@$(PY) -m tools.registryctl verify-site --public $(PUBLIC) --a11y-sample 0 \
+		| grep -E 'external asset' && \
+		{ echo "external asset reference found"; exit 1; } || echo "no external assets"
 
 test: ## Unit and pipeline tests
 	$(PY) -m pytest tests/ -q

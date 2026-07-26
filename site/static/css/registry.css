@@ -113,6 +113,24 @@ small, .small { font-size: .84rem; }
   background: var(--bg-alt); border: 1px solid var(--border); color: var(--fg);
   border-radius: 8px; width: 36px; height: 34px; cursor: pointer; font-size: 1rem;
 }
+/* ---------- usage disclaimer ---------- */
+/* Visible by default; hidden only once the reader has dismissed it. The state
+   lands on <html> before first paint, so there is no flash either way. */
+.disclaimer {
+  border-bottom: 1px solid var(--warn);
+  background: var(--warn-soft);
+  color: var(--fg);
+}
+:root[data-disclaimer="dismissed"] .disclaimer { display: none; }
+.disclaimer-inner {
+  display: flex; align-items: flex-start; gap: 20px;
+  padding-top: 12px; padding-bottom: 12px;
+}
+.disclaimer-text { margin: 0; font-size: .9rem; line-height: 1.55; max-width: 92ch; }
+.disclaimer-text strong { color: var(--warn); }
+.disclaimer-text a { margin-left: .4em; white-space: nowrap; }
+.disclaimer-dismiss { margin-left: auto; flex: none; }
+
 .site-footer { border-top: 1px solid var(--border); margin-top: 64px; padding: 28px 0 48px; background: var(--bg-alt); }
 .footer-inner { display: flex; gap: 40px; justify-content: space-between; flex-wrap: wrap; }
 .site-footer ul { list-style: none; padding: 0; display: grid; gap: 6px; font-size: .92rem; }
@@ -325,6 +343,9 @@ pre.mermaid:not([data-processed]) { color: var(--fg-muted); font-size: .8rem; }
 }
 @media print {
   .site-header, .site-footer, .harness-side, .actions, .skip-link { display: none; }
+  .disclaimer-dismiss { display: none; }
+  /* The disclaimer itself stays: a printed page outlives its banner state. */
+  .disclaimer { border: 1px solid #000; }
   body { font-size: 11pt; }
   .harness-body { display: block; }
   details { display: block; }

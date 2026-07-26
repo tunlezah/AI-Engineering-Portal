@@ -5,7 +5,10 @@
 </header>
 
 <div id="browse" class="browse" data-catalog="{{ "catalog.json" | relURL }}">
-  <form class="browse-search" role="search" onsubmit="return false">
+  {{/* Submission is cancelled in registry.js, not with an inline handler: the
+       site ships no inline event handlers at all, which is what lets the build
+       gate reject any that appear in generated content. */}}
+  <form class="browse-search" role="search" data-no-submit>
     <label class="visually-hidden" for="browse-q">Search</label>
     <input type="search" id="browse-q" placeholder='e.g. rag lifecycle:certified quality:&gt;85 plugin:pii-redactor'>
     <button type="button" id="browse-clear" class="button">Clear</button>

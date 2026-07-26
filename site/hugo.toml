@@ -40,7 +40,12 @@ disableKinds = ["rss"]
     tags = "/tags/:slug/"
 
 [markup.goldmark.renderer]
-  unsafe = true          # generated diagrams and charts are ours, not user HTML
+  # Harness README and CHANGELOG text is rendered through Goldmark, and that
+  # text comes from any project the crawler finds — it is not ours. With
+  # unsafe = true a README containing <img src=x onerror=…> became stored XSS on
+  # the harness page. Generated diagrams and charts never needed this: they are
+  # emitted by templates (safeHTML on our own SVG), not by Markdown.
+  unsafe = false
 
 [markup.tableOfContents]
   startLevel = 2
