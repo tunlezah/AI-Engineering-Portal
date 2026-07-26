@@ -96,16 +96,81 @@ def verify_snapshot(snapshot: pathlib.Path, *, base: pathlib.Path | None = None,
     return r
 
 
-ASSET_RE = re.compile(r"""(?:src|href)\s*=\s*["']([^"']+)["']|url\(\s*["']?([^"')]+)""", re.I)
-LOCAL_SCHEMES = ("mailto:", "tel:", "data:", "#", "javascript:")
+# Attribute values are matched quoted *and* unquoted: Hugo's --minify strips
+# quotes from values that contain no whitespace, so a quotes-only pattern sees
+# nothing at all on a production build and the offline gate passes vacuously.
+TAG_RE = re.compile(
+    r"<(script|link|img|source|iframe|embed|video|audio|object|track|a|area)\b([^>]*)>", re.I)
+ATTR_RE = re.compile(
+    r"""\b(src|href|poster|data|data-catalog)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<>`]+))""", re.I)
+CSS_URL_RE = re.compile(r"""url\(\s*(?:"([^"]*)"|'([^']*)'|([^)"']*))\)""", re.I)
+LOCAL_SCHEMES = ("mailto:", "tel:", "data:", "#", "javascript:", "blob:", "about:")
 # Links into GitLab are legitimate: the registry indexes repositories it cannot
 # host. They are not fetched at page load, so they do not break offline use.
 ALLOWED_EXTERNAL_HOSTS = ("gitlab.acme.internal", "registry.pages.acme.internal")
+INLINE_HANDLER_RE = re.compile(r"<[a-z][^>]*?\s(on[a-z]{3,20})\s*=", re.I)
+JS_URL_RE = re.compile(r"""(?:src|href)\s*=\s*["']?\s*javascript:""", re.I)
+
+# Whether the browser fetches the URL to render the page is a property of the
+# element and attribute, not of the file extension: <a href="…/schema.json"> is
+# a link a reader may click, while <link href="…/x.css"> is a hard dependency
+# that breaks the page offline. Only the latter may not point off-site.
+FETCHED = {
+    ("script", "src"), ("link", "href"), ("img", "src"), ("source", "src"),
+    ("iframe", "src"), ("embed", "src"), ("video", "src"), ("video", "poster"),
+    ("audio", "src"), ("object", "data"), ("track", "src"),
+    ("div", "data-catalog"),
+}
+
+
+def _targets(html: str):
+    """Yield (url, is_fetched) for every URL the page references.
+
+    is_fetched marks the subset the browser loads on its own; those are the
+    ones that make a page fail offline.
+    """
+    for m in TAG_RE.finditer(html):
+        tag = m.group(1).lower()
+        for a in ATTR_RE.finditer(m.group(2)):
+            attr = a.group(1).lower()
+            value = next(g for g in (a.group(2), a.group(3), a.group(4)) if g is not None)
+            yield value.strip(), (tag, attr) in FETCHED
+    # The browse page fetches its catalogue by XHR from a data attribute.
+    for a in re.finditer(r"""\bdata-catalog\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<>`]+))""", html):
+        value = next(g for g in a.groups() if g is not None)
+        yield value.strip(), True
+    for m in CSS_URL_RE.finditer(html):
+        value = next((g for g in m.groups() if g is not None), "")
+        yield value.strip().strip("\"'"), True
+
+
+def _detect_base_path(pages: list[pathlib.Path], public: pathlib.Path) -> str:
+    """Infer the URL prefix of a site built for a GitLab Pages *project* subpath.
+
+    A project site is served from https://<group>.gitlab.io/<project>/, so Hugo
+    writes every root-absolute URL as /<project>/…, which does not correspond to
+    anything in the output tree. A first path segment that is not a real
+    top-level entry of public/ is that prefix.
+    """
+    top = {p.name for p in public.iterdir()}
+    counts: dict[str, int] = {}
+    for page in pages[:25]:
+        html = page.read_text(encoding="utf-8", errors="replace")
+        for target, _ in _targets(html):
+            if not target.startswith("/") or target.startswith("//"):
+                continue
+            seg = target.lstrip("/").split("/")[0]
+            if seg and seg not in top:
+                counts[seg] = counts.get(seg, 0) + 1
+    if not counts:
+        return ""
+    seg, n = max(counts.items(), key=lambda kv: kv[1])
+    return seg if n >= 3 else ""
 
 
 def verify_site(public: pathlib.Path, *, max_page_kb: int = 400,
-                max_catalog_mb: float = 6.0, allow_hosts: tuple[str, ...] = ALLOWED_EXTERNAL_HOSTS
-                ) -> Result:
+                max_catalog_mb: float = 6.0, allow_hosts: tuple[str, ...] = ALLOWED_EXTERNAL_HOSTS,
+                base_path: str | None = None) -> Result:
     public = pathlib.Path(public)
     r = Result()
     pages = sorted(public.rglob("*.html"))
@@ -113,6 +178,10 @@ def verify_site(public: pathlib.Path, *, max_page_kb: int = 400,
     if not pages:
         r.errors.append("no pages were generated")
         return r
+
+    prefix = (base_path if base_path is not None else _detect_base_path(pages, public)).strip("/")
+    if prefix:
+        r.stats["base_path"] = f"/{prefix}/"
 
     known_paths = {p.relative_to(public).as_posix() for p in public.rglob("*") if p.is_file()}
     heavy: list[str] = []
@@ -125,22 +194,32 @@ def verify_site(public: pathlib.Path, *, max_page_kb: int = 400,
         if size_kb > max_page_kb:
             heavy.append(f"{rel} ({size_kb:.0f} KB)")
 
-        for m in ASSET_RE.finditer(html):
-            target = (m.group(1) or m.group(2) or "").strip()
+        # Injected-markup gate. README and CHANGELOG text is rendered through
+        # Goldmark with unsafe = false, so repository HTML arrives escaped and
+        # neither of these can come from content. If one appears, the escaping
+        # has been turned off somewhere and the build must not ship.
+        for m in INLINE_HANDLER_RE.finditer(html):
+            r.errors.append(f"inline event handler in {rel}: {m.group(1)}=…")
+        if JS_URL_RE.search(html):
+            r.errors.append(f"javascript: URL in {rel}")
+
+        for target, is_fetched in _targets(html):
             if not target or target.startswith(LOCAL_SCHEMES):
                 continue
             parsed = urlparse(target)
             if parsed.scheme in ("http", "https") or target.startswith("//"):
                 host = parsed.netloc or target.lstrip("/").split("/")[0]
-                is_asset = bool(m.group(2)) or re.search(
-                    r"\.(js|css|woff2?|ttf|png|jpe?g|svg|gif|webp)($|\?)", target, re.I)
-                if is_asset:
+                if is_fetched:
                     r.errors.append(f"external asset reference in {rel}: {target}")
-                elif not any(host.endswith(h) for h in allow_hosts):
+                elif not any(host == h or host.endswith("." + h) for h in allow_hosts):
                     r.warnings.append(f"external link in {rel}: {target}")
                 continue
+            if parsed.scheme:
+                # Any other scheme (ftp:, ws:, file:) is not offline-safe.
+                r.errors.append(f"non-local scheme in {rel}: {target}")
+                continue
             # internal link: resolve it
-            if not _resolves(rel, target, known_paths):
+            if not _resolves(rel, target, known_paths, prefix):
                 broken.append(f"{rel} -> {target}")
 
     if heavy:
@@ -167,12 +246,21 @@ def verify_site(public: pathlib.Path, *, max_page_kb: int = 400,
     return r
 
 
-def _resolves(page_rel: str, target: str, known: set[str]) -> bool:
+def _resolves(page_rel: str, target: str, known: set[str], base_path: str = "") -> bool:
     path = unquote(target.split("#")[0].split("?")[0])
     if not path:
         return True
     if path.startswith("/"):
         candidate = path.lstrip("/")
+        if base_path:
+            # Root-absolute URLs on a subpath deployment carry the project
+            # prefix, which is not part of the output tree.
+            if candidate == base_path:
+                candidate = ""
+            elif candidate.startswith(base_path + "/"):
+                candidate = candidate[len(base_path) + 1:]
+        if not candidate:
+            candidate = "index.html"
     else:
         base = page_rel.rsplit("/", 1)[0] if "/" in page_rel else ""
         candidate = f"{base}/{path}" if base else path
@@ -231,7 +319,10 @@ def check_accessibility(public: pathlib.Path, sample: int = 40) -> Result:
                 break
         if "skip-link" not in html:
             r.warnings.append(f"{rel}: no skip link")
-        ids = re.findall(r'\sid="([^"]+)"', html)
+        # Unquoted form included: --minify drops the quotes, and a quoted-only
+        # pattern silently found nothing on exactly the builds that ship.
+        ids = [next(g for g in m.groups() if g is not None)
+               for m in re.finditer(r"""\sid\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'<>`]+))""", html)]
         dupes = {i for i in ids if ids.count(i) > 1}
         if dupes:
             # Duplicate ids break in-page navigation and confuse screen readers.

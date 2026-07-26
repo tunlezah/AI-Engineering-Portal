@@ -1,0 +1,137 @@
+# ==========================================================================
+# The pipeline that actually builds and publishes this repository.
+#
+# It runs the same steps as `make all`, in the same order, and ends in a
+# `pages` job so GitLab Pages serves the result. Everything happens inside the
+# runner: the site is generated from the fixture harnesses committed here, so a
+# green pipeline needs no GitLab API, no database and no internet egress.
+#
+# `ci/registry-ci.yml` is the *production* pipeline for an organisation that has
+# real harness projects to crawl — it triggers incrementally, commits a snapshot
+# branch and reconciles hourly. This file is the self-contained one.
+#
+# ---- Air-gapped installs -------------------------------------------------
+# The only things pulled from outside the repository are the two container
+# images and the Python dependencies. Override these four variables (Settings →
+# CI/CD → Variables) to point at your internal mirrors and the pipeline has no
+# egress at all:
+#
+#   PYTHON_IMAGE   an image with Python 3.11+
+#   HUGO_IMAGE     an image with Hugo *extended* >= 0.148
+#   PIP_INDEX_URL  your internal PyPI mirror
+#   PIP_ARGS       e.g. "--no-index --find-links vendor/wheels" to install from
+#                  wheels committed to the repository
+#
+# An image that already contains pyyaml and jsonschema (the harness toolkit
+# image, for instance) skips the install entirely: set PIP_ARGS to "--help".
+# ==========================================================================
+
+variables:
+  PYTHON_IMAGE: "python:3.11-slim"
+  HUGO_IMAGE: "hugomods/hugo:exts-0.148.1"
+  PIP_ARGS: ""
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  GIT_DEPTH: "20"
+
+stages: [test, snapshot, build, verify, deploy]
+
+.python:
+  image: $PYTHON_IMAGE
+  before_script:
+    - pip install $PIP_ARGS --quiet pyyaml jsonschema pytest
+
+# --------------------------------------------------------------------------
+# test — the rubric and the lifecycle gates are the contested part of the
+# system, so they are unit-tested before anything is published.
+# --------------------------------------------------------------------------
+test:
+  extends: .python
+  stage: test
+  script:
+    - python -m pytest tests/ -q --junitxml=reports/junit.xml
+  artifacts:
+    when: always
+    reports: { junit: reports/junit.xml }
+    expire_in: 30 days
+
+# --------------------------------------------------------------------------
+# snapshot — validate the fixtures, crawl them, index them, emit Hugo input.
+#
+# The fixture tree contains one deliberately-invalid manifest so the error path
+# is exercised on every build; `make validate-fixtures` asserts that exactly
+# that one fails, so a newly-broken fixture still fails the pipeline.
+# --------------------------------------------------------------------------
+snapshot:
+  extends: .python
+  stage: snapshot
+  script:
+    - make validate-fixtures
+    - make index
+    - make emit
+    - python -m tools.registryctl report --snapshot build/snapshot
+  artifacts:
+    paths:
+      - build/
+      - site/content/harnesses/
+      - site/data/
+      - site/static/catalog.json
+      - site/static/graph.json
+    expire_in: 7 days
+
+# --------------------------------------------------------------------------
+# build — Hugo renders the emitted content.
+#
+# --baseURL is not cosmetic. A GitLab Pages *project* site is served from
+# https://<group>.gitlab.io/<project>/, and without the prefix every stylesheet,
+# script and link on the deployed site resolves to the wrong path. $CI_PAGES_URL
+# is the address GitLab will actually serve this build from.
+# --------------------------------------------------------------------------
+build:site:
+  image: $HUGO_IMAGE
+  stage: build
+  needs: [snapshot]
+  script:
+    - hugo --source site --gc --minify --destination public --baseURL "${CI_PAGES_URL}/"
+  artifacts:
+    paths: [site/public/]
+    expire_in: 7 days
+
+# --------------------------------------------------------------------------
+# verify — blocking. Internal links resolve, no page reaches the network, the
+# catalogue is within budget, and a sample of pages passes the static
+# accessibility checks. This is the gate that makes "offline" a fact rather
+# than an intention.
+# --------------------------------------------------------------------------
+verify:
+  extends: .python
+  stage: verify
+  needs: [snapshot, build:site]
+  script:
+    - python -m tools.registryctl verify-snapshot --snapshot build/snapshot
+    # Strip scheme and host from CI_PAGES_URL to get the path the site is
+    # mounted under, so root-absolute links are resolved against the right root.
+    - BASE_PATH=$(printf '%s' "$CI_PAGES_URL" | sed -E 's#^[a-z]+://[^/]+##; s#^/##; s#/$##')
+    - echo "verifying a site mounted at '/${BASE_PATH}'"
+    - python -m tools.registryctl verify-site --public site/public --base-path "$BASE_PATH"
+  artifacts:
+    when: always
+    paths: [reports/]
+    expire_in: 30 days
+
+# --------------------------------------------------------------------------
+# deploy — GitLab Pages serves whatever the `pages` job leaves in public/.
+# --------------------------------------------------------------------------
+pages:
+  image: $PYTHON_IMAGE
+  stage: deploy
+  needs: [build:site, verify]
+  script:
+    - mv site/public public
+    - echo "publishing $(find public -name '*.html' | wc -l) pages to $CI_PAGES_URL"
+  artifacts:
+    paths: [public]
+  environment:
+    name: pages
+    url: $CI_PAGES_URL
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

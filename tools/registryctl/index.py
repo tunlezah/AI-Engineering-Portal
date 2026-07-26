@@ -20,6 +20,7 @@ import collections
 import hashlib
 import json
 import pathlib
+import re
 from datetime import date, timedelta
 from typing import Any, Iterable
 
@@ -31,6 +32,37 @@ from .sources import MANIFEST
 from .validate import ReferenceData, Finding, validate_manifest
 
 CARD_API = "harness.registry.acme.internal/v1"
+
+# The schema constrains metadata.id to this slug, but a manifest that *fails*
+# validation still gets a card, and that path never re-checked the field — so
+# the one id the indexer cannot trust was the one it wrote to disk. An id is a
+# filename and a URL segment, so it is re-checked here, at the boundary.
+ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$")
+
+
+def safe_id(value: Any) -> str:
+    """Return value if it is a legitimate harness id, otherwise "".
+
+    Rejects rather than sanitises: there is no valid id containing a path
+    separator, so `../../etc/passwd` is an attack, not a naming style, and
+    quietly rewriting it into something plausible would hide that.
+    """
+    text = value if isinstance(value, str) else ""
+    return text if ID_RE.match(text) else ""
+
+
+def safe_child(base: pathlib.Path, name: str) -> pathlib.Path:
+    """Resolve base/name, refusing anything that escapes base.
+
+    Defence in depth behind safe_id(): every filesystem write keyed by
+    registry-derived data goes through here, so a future field used as a path
+    cannot reintroduce traversal silently.
+    """
+    base = pathlib.Path(base).resolve()
+    target = (base / name).resolve()
+    if target != base and base not in target.parents:
+        raise ValueError(f"refusing to write outside {base}: {name!r}")
+    return target
 
 
 class Governance:
@@ -120,18 +152,35 @@ def _error_card(project: Any, findings: list[Finding], manifest: Any = None) -> 
     Hiding broken harnesses would make the registry look healthier than the
     estate is, which is the opposite of the point.
     """
-    hid = None
+    declared = (manifest.get("metadata") or {}).get("id") if isinstance(manifest, dict) else None
+    # An invalid manifest's id is untrusted: fall back to the project path,
+    # which GitLab owns, whenever the declared value is not a plain slug.
+    hid = (safe_id(declared)
+           or safe_id(project.project_path.rsplit("/", 1)[-1])
+           or "unknown-harness")
+
+    spec: dict
     if isinstance(manifest, dict):
-        hid = (manifest.get("metadata") or {}).get("id")
-    hid = hid or project.project_path.rsplit("/", 1)[-1]
-    return {
-        "apiVersion": CARD_API,
-        "kind": "HarnessCard",
-        "spec": manifest if isinstance(manifest, dict) else {
+        spec = dict(manifest)
+        # The card is keyed by spec.metadata.id, so the checked id has to
+        # replace the declared one here — echoing the manifest back verbatim is
+        # what let a crafted id choose its own filename.
+        metadata = dict(spec.get("metadata") or {}) if isinstance(spec.get("metadata"), dict) else {}
+        metadata["id"] = hid
+        if declared is not None and declared != hid:
+            metadata["declared_id"] = str(declared)[:120]
+        metadata.setdefault("name", hid)
+        spec["metadata"] = metadata
+    else:
+        spec = {
             "metadata": {"id": hid, "name": hid, "summary": "Manifest failed validation.",
                          "owner": "group:unknown", "team": "unknown", "maintainers": []},
             "spec": {},
-        },
+        }
+    return {
+        "apiVersion": CARD_API,
+        "kind": "HarnessCard",
+        "spec": spec,
         "status": {
             "indexed_at": now().isoformat(timespec="seconds"),
             "valid": False,
@@ -474,7 +523,7 @@ def write_snapshot(cards: list[dict], out: pathlib.Path, ref: ReferenceData) -> 
 
     cards = sorted(cards, key=lambda c: c["spec"]["metadata"]["id"])
     for c in cards:
-        (out / "harnesses" / f"{c['spec']['metadata']['id']}.json").write_text(
+        safe_child(out / "harnesses", f"{c['spec']['metadata']['id']}.json").write_text(
             json.dumps(c, indent=2, sort_keys=True)
         )
 

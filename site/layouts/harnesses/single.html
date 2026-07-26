@@ -208,7 +208,16 @@ harnessctl install</code></pre>
       {{ with $st.content.changelog }}
       <section id="h-version-history">
         <h2>Version history</h2>
-        <div class="changelog">{{ . | markdownify }}</div>
+        {{/* The changelog is a second, independent Goldmark pass, so its
+             auto-generated heading anchors do not know about the README's and
+             collide with them ("Evaluation" in both) — duplicate ids break
+             in-page navigation and confuse screen readers. Nothing links to a
+             changelog heading, so the anchors are dropped. safeHTML is applied
+             to renderer output, not to repository text: with goldmark
+             unsafe = false any HTML in the CHANGELOG was already escaped. */}}
+        <div class="changelog">
+          {{ . | markdownify | replaceRE `(?i)(<h[1-6])\s+id="[^"]*"` "$1" | safeHTML }}
+        </div>
       </section>
       {{ end }}
 

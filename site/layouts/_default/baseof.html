@@ -5,9 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ if .IsHome }}{{ .Site.Title }}{{ else }}{{ .Title }} · {{ .Site.Title }}{{ end }}</title>
 <meta name="description" content="{{ with .Params.summary }}{{ . }}{{ else }}{{ .Site.Params.description }}{{ end }}">
-{{/* Theme is applied before first paint so a dark-mode user never sees a white flash. */}}
+{{/* Theme and disclaimer state are applied before first paint: a dark-mode user
+     never sees a white flash, and someone who dismissed the disclaimer never
+     sees it flicker back. Both degrade to the safe default (system theme,
+     disclaimer shown) when JavaScript or storage is unavailable. */}}
 <script>
-(function(){try{var t=localStorage.getItem('registry-theme');if(t){document.documentElement.dataset.theme=t;}}catch(e){}})();
+(function(){var d=document.documentElement;try{var t=localStorage.getItem('registry-theme');if(t){d.dataset.theme=t;}}catch(e){}
+try{if(localStorage.getItem('registry-disclaimer')==='dismissed'){d.dataset.disclaimer='dismissed';}}catch(e){}})();
 </script>
 <link rel="stylesheet" href="{{ "css/registry.css" | relURL }}">
 <link rel="icon" href="{{ "favicon.svg" | relURL }}" type="image/svg+xml">
@@ -38,6 +42,28 @@
   </div>
 </header>
 
+{{/* Shown until the reader dismisses it. A harness is an implementation someone
+     else evaluated in their own context; the registry reports evidence, it does
+     not certify fitness for yours. */}}
+<aside class="disclaimer" aria-label="Usage disclaimer" data-disclaimer-banner>
+  <div class="wrap disclaimer-inner">
+    <p class="disclaimer-text">
+      <strong>Read the harness before you use it.</strong>
+      Quality scores, lifecycle tiers and evaluation results are
+      <em>observations</em>, not guarantees — they describe how a harness behaved
+      on its own test data, in its owner's context. Before adopting one, read its
+      documentation, its stated <strong>limitations</strong> and its evaluation
+      history, and satisfy yourself that it is appropriate for your use case,
+      your data classification and your risk appetite. Accountability for what
+      you ship stays with you.
+      <a href="{{ "docs/using-the-registry/" | relURL }}">How to read a harness page</a>
+    </p>
+    <button type="button" class="button disclaimer-dismiss" data-disclaimer-dismiss>
+      Dismiss
+    </button>
+  </div>
+</aside>
+
 <main id="main" class="wrap">
   {{ block "main" . }}{{ end }}
 </main>
@@ -61,6 +87,7 @@
 </footer>
 
 <script src="{{ "js/theme.js" | relURL }}" defer></script>
+<script src="{{ "js/disclaimer.js" | relURL }}" defer></script>
 {{ if or (eq .Type "harnesses") .Params.mermaid }}
 <script src="{{ "js/mermaid.min.js" | relURL }}" defer></script>
 <script src="{{ "js/mermaid-init.js" | relURL }}" defer></script>

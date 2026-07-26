@@ -137,7 +137,7 @@ def cmd_verify_snapshot(args: argparse.Namespace) -> int:
 
 def cmd_verify_site(args: argparse.Namespace) -> int:
     site = verify_site(pathlib.Path(args.public), max_page_kb=args.max_page_kb,
-                       max_catalog_mb=args.max_catalog_mb)
+                       max_catalog_mb=args.max_catalog_mb, base_path=args.base_path)
     a11y = check_accessibility(pathlib.Path(args.public), sample=args.a11y_sample)
     print("site verification:")
     print(site.report())
@@ -217,6 +217,10 @@ def build_parser() -> argparse.ArgumentParser:
     vt.add_argument("--max-page-kb", type=int, default=400)
     vt.add_argument("--max-catalog-mb", type=float, default=6.0)
     vt.add_argument("--a11y-sample", type=int, default=40)
+    vt.add_argument("--base-path", default=None,
+                    help="URL prefix the site is served under (GitLab Pages project "
+                         "sites live at /<project>/). Auto-detected when omitted; "
+                         "pass '' to force root.")
     vt.set_defaults(func=cmd_verify_site)
 
     b = sub.add_parser("build", help="crawl + index + emit (development loop)")
